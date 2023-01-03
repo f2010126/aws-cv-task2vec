@@ -16,11 +16,11 @@ import collections
 import torchvision.transforms as transforms
 import os
 import json
+import torch
+from sklearn.model_selection import train_test_split
+from torch.utils.data import (TensorDataset,)
 
-try:
-    from IPython import embed
-except:
-    pass
+from textutils import load_text_labels, tokenize, encode, load_pretrained_vectors
 
 _DATASETS = {}
 
@@ -346,6 +346,37 @@ def stl10(root):
     testset.targets = testset.labels
     return trainset, testset
 
+
+
+@_add_dataset
+def text_cnn(root):
+    # tokenising, encoding etc has been done
+    # return the trainset and test set here.  TensorDataset
+    # Tokenize data
+    print("Tokenizing...\n")
+    texts, labels = load_text_labels(root = 'data')
+    tokenized_texts, word2idx, max_len = tokenize(texts)
+    input_ids = encode(tokenized_texts, word2idx, max_len)
+    # Load pretrained vectors
+    print("Load Vectors...\n")
+    embedding_path = os.path.join(os.getcwd(), 'embeddings', 'crawl-300d-2M.vec')
+    embeddings = load_pretrained_vectors(word2idx, embedding_path)
+    embeddings = torch.tensor(embeddings)
+
+    train_inputs, val_inputs, train_labels, val_labels = train_test_split(
+        input_ids, labels, test_size=0.1, random_state=42)
+
+    # Convert data type to torch.Tensor
+    train_inputs, val_inputs, train_labels, val_labels = \
+        tuple(torch.tensor(data) for data in
+              [train_inputs, val_inputs, train_labels, val_labels])
+
+    train_data = TensorDataset(train_inputs, train_labels)
+    val_data = TensorDataset(val_inputs, val_labels)
+    train_data.targets = train_labels
+    val_data.targets = val_labels
+
+    return train_data, val_data
 
 def get_dataset(root, config=None):
     return _DATASETS[config.name](os.path.expanduser(root), config)
