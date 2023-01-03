@@ -62,7 +62,7 @@ def resnet18(pretrained=False, num_classes=1000):
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model: ProbeNetwork = ResNet(resnet.BasicBlock, [2, 2, 2, 2], num_classes=num_classes)
+    model: ProbeNetwork = ResNet(block=resnet.BasicBlock, layers = [2, 2, 2, 2], num_classes=num_classes)
     if pretrained:
         state_dict = model_zoo.load_url(resnet.model_urls['resnet18'])
         state_dict = {k: v for k, v in state_dict.items() if 'fc' not in k}

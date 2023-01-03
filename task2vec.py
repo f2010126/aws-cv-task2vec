@@ -296,7 +296,8 @@ class Task2Vec:
 
     def extract_embedding(self, model: ProbeNetwork):
         """
-        Reads the values stored by `compute_fisher` and returns them in a common format that describes the diagonal of the
+        Reads the values stored by `compute_fisher` and
+        returns them in a common format that describes the diagonal of the
         Fisher Information Matrix for each layer.
 
         :param model:

@@ -17,7 +17,6 @@ import torchvision.transforms as transforms
 import os
 import json
 
-
 try:
     from IPython import embed
 except:
@@ -288,11 +287,15 @@ def cifar100(root):
     return trainset, testset
 
 
+def _convert_transform(x):
+    return x.convert("RGB")
+
+
 @_add_dataset
 def mnist(root):
     from torchvision.datasets import MNIST
     transform = transforms.Compose([
-        lambda x: x.convert("RGB"),
+        _convert_transform,
         transforms.Resize(224),
         transforms.ToTensor(),
         # transforms.Normalize((0.5, 0.5, 0.5), (1., 1., 1.)),
@@ -306,7 +309,7 @@ def mnist(root):
 def letters(root):
     from torchvision.datasets import EMNIST
     transform = transforms.Compose([
-        lambda x: x.convert("RGB"),
+        _convert_transform,
         transforms.Resize(224),
         transforms.ToTensor(),
         # transforms.Normalize((0.5, 0.5, 0.5), (1., 1., 1.)),
@@ -320,7 +323,7 @@ def letters(root):
 def kmnist(root):
     from torchvision.datasets import KMNIST
     transform = transforms.Compose([
-        lambda x: x.convert("RGB"),
+        _convert_transform,
         transforms.Resize(224),
         transforms.ToTensor(),
     ])
@@ -346,5 +349,3 @@ def stl10(root):
 
 def get_dataset(root, config=None):
     return _DATASETS[config.name](os.path.expanduser(root), config)
-
-

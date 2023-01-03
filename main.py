@@ -25,9 +25,9 @@ from task2vec import Task2Vec
 from omegaconf import DictConfig, OmegaConf
 
 
-@hydra.main(config_path="conf/config.yaml")
+@hydra.main(config_path="conf", config_name="config")
 def main(cfg: DictConfig):
-    logging.info(cfg.pretty())
+    # logging.info(cfg.pretty())
     train_dataset, test_dataset = get_dataset(cfg.dataset.root, cfg.dataset)
     if hasattr(train_dataset, 'task_name'):
         print(f"======= Embedding for task: {train_dataset.task_name} =======")
