@@ -27,8 +27,15 @@ def text_data():
 
     for name, dataset in zip(dataset_names, dataset_list):
         print(f"Embedding {name}")
-        probe_network = get_model('resnet34', pretrained=True, num_classes=int(max(dataset.targets) + 1))  # .cuda()
-        embeddings.append(Task2Vec(probe_network, max_samples=1000, skip_layers=6).embed(dataset))
+        probe_network = get_model(model_name='cnn_text', pretrained=True,
+                                  pretrained_embedding=dataset.pretrained_embedding,
+                                  freeze_embedding=False,
+                                  vocab_size=None,
+                                  embed_dim=300,
+                                  filter_sizes=[3, 4, 5],
+                                  num_filters=[100, 100, 100],
+                                  num_classes=2,dropout=0.5)  # .cuda()
+        embeddings.append(Task2Vec(probe_network, max_samples=1000, skip_layers=2).embed(dataset))
 
 
 if __name__ == '__main__':

@@ -376,6 +376,8 @@ def text_cnn(root):
     train_data.targets = train_labels
     val_data.targets = val_labels
 
+    train_data.pretrained_embedding=embeddings
+
     return train_data, val_data
 
 def get_dataset(root, config=None):
