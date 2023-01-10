@@ -24,6 +24,7 @@ import logging
 import variational
 from torch.utils.data import DataLoader, Dataset
 from torch.optim.optimizer import Optimizer
+from transformers import AdamW
 from utils import AverageMeter, get_error, get_device
 
 
@@ -53,8 +54,8 @@ class ProbeNetwork(ABC, nn.Module):
         raise NotImplementedError("Override the classifier setter to set the submodules of the network that"
                                   " should be interpreted as the classifier")
 
-
-class Task2Vec:
+# In theory, it should work for all so.
+class Task2VecNLP:
 
     def __init__(self, model: ProbeNetwork, skip_layers=0, max_samples=None, classifier_opts=None,
                  method='montecarlo', method_opts=None, loader_opts=None, bernoulli=False):
@@ -115,7 +116,7 @@ class Task2Vec:
             logging.info(f"\tepoch {k + 1}/{epochs}")
             for i, (data, target) in enumerate(tqdm(data_loader, leave=False, desc="Computing Fisher")):
                 data = data.to(device)
-                output = self.model(data, start_from=self.skip_layers)
+                output = self.model(x=data, enable_fim=True)
                 # The gradients used to compute the FIM needs to be for y sampled from
                 # the model distribution y ~ p_w(y|x), not for y from the dataset
                 if self.bernoulli:
@@ -232,7 +233,7 @@ class Task2Vec:
         logging.info("Caching features...")
         if loader_opts is None:
             loader_opts = {}
-        data_loader = DataLoader(dataset, shuffle=False, batch_size=loader_opts.get('batch_size', 64),
+        data_loader = DataLoader(dataset, shuffle=False, batch_size=loader_opts.get('batch_size', 16),
                                  num_workers=loader_opts.get('num_workers', 6), drop_last=False)
 
         device = next(self.model.parameters()).device
@@ -253,25 +254,34 @@ class Task2Vec:
             n_batches = len(data_loader)
         targets = []
 
-        for i, (input, target) in tqdm(enumerate(itertools.islice(data_loader, 0, 1)),
-                                       total=1,
-                                       leave=False,
-                                       desc="Caching features"):
-            targets.append(target.clone())
-            self.model(input.to(device))
+        for step, batch in enumerate(data_loader):
+            # progress update after every 10 batches.
+            if step >= 100:
+                break
+            if step % 10 == 0 and not step == 0:
+                print('  Batch {:>5,}  of  {:>5,}.'.format(step, len(data_loader)))
+            # push the batch to gpu
+            batch = [r.to(device) for r in batch]
+            sent_id, mask, labels = batch
+
+            # clear previously calculated gradients
+            self.model.zero_grad()
+
+            targets.append(labels.clone())
+            self.model(input_ids=sent_id, mask=mask, enable_fim=False)
+
+
         for hook in hooks:
             hook.remove()
-        for index in indexes:
-            # needs tuple of tensors
-            # if not isinstance(self.model.layers[index].input_features, list):
-            #     input_feat = [self.model.layers[index].input_features,]
-            # else:
-            #     input_feat = self.model.layers[index].input_features
-            # convert the input features into tensors.
-            self.model.layers[index].input_features = torch.cat(self.model.layers[index].input_features)
-        self.model.layers[-1].targets = torch.cat(targets)
 
-    def _fit_classifier(self, optimizer='adam', learning_rate=0.0004, weight_decay=0.0001,
+        for index in indexes:
+            self.model.layers[index].input_features = torch.cat(self.model.layers[index].input_features) # add a
+
+
+
+        self.model.layers[-1].targets = torch.cat(targets) # add a prop to the classifier
+
+    def _fit_classifier(self, optimizer='adamW', learning_rate=0.0004, weight_decay=0.0001,
                         epochs=10):
         """Fits the last layer of the network using the cached features."""
         logging.info("Fitting final classifier...")
@@ -287,10 +297,13 @@ class Task2Vec:
             optimizer = torch.optim.Adam(self.model.fc.parameters(), lr=learning_rate, weight_decay=weight_decay)
         elif optimizer == 'sgd':
             optimizer = torch.optim.SGD(self.model.fc.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        elif optimizer == 'adamW':
+            optimizer = AdamW(self.model.classifier.parameters(), lr=1e-3)
+
         else:
             raise ValueError(f'Unsupported optimizer {optimizer}')
 
-        loss_fn = nn.CrossEntropyLoss()
+        loss_fn = nn.NLLLoss()
         for epoch in tqdm(range(epochs), desc="Fitting classifier", leave=False):
             metrics = AverageMeter()
             for data, target in data_loader:

@@ -1,9 +1,14 @@
 from task2vec import Task2Vec
+from task2vec_nlp import Task2VecNLP
 from models import get_model
 import datasets
+from datasets import benchmark_data
 import task_similarity
-import nltk
-nltk.download("all")
+from transformers import BertModel
+import torch
+from nlp.nlp_model import BERT_Arch, BERT
+
+
 
 def small_data():
     # ('stl10', 'mnist', 'cifar10', 'cifar100', 'letters', 'kmnist')
@@ -37,6 +42,14 @@ def text_data():
                                   num_classes=2,dropout=0.5)  # .cuda()
         embeddings.append(Task2Vec(probe_network, max_samples=1000, skip_layers=2).embed(dataset))
 
+def benchmark():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    train_data, val_data, label_map, id2label = benchmark_data(root='r')
+
+    probe_network = BERT()
+    embedding =Task2VecNLP(probe_network, max_samples=1000, skip_layers=1).embed(train_data)
+    print(f'embed {embedding}')
+
 
 if __name__ == '__main__':
-    text_data()
+    benchmark()

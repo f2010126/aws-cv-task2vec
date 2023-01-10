@@ -29,7 +29,7 @@ def train(model,train_dataloader,device,cross_entropy, optimizer):
         model.zero_grad()
 
         # get model predictions for the current batch
-        preds = model(sent_id, mask)
+        preds = model(input_ids=sent_id, mask=mask, enable_fim=False)
         # pred_labels = torch.argmax(logits, dim=1)
 
         # compute the loss between actual and predicted values
@@ -126,7 +126,7 @@ def save_checkpoint(filename, epoch, model, optimizer, label_map, id2label):
         'id_map':id2label}
     torch.save(state, filename)
 
-def training_loop(model, optimizer, label_map, id2label,epochs,train_dataloader,cross_entropy,device):
+def training_loop(model, optimizer, label_map, id2label,epochs,train_dataloader,cross_entropy, val_dataloader, device):
     # set initial loss to infinite
     best_valid_loss = float('inf')
 
@@ -143,7 +143,7 @@ def training_loop(model, optimizer, label_map, id2label,epochs,train_dataloader,
         train_loss, f1_train = train(model,train_dataloader, device, cross_entropy,optimizer)
 
         # evaluate model
-        valid_loss, f1_valid = evaluate()
+        valid_loss, f1_valid = evaluate(model,val_dataloader,device,cross_entropy)
 
         # save the best model
         if valid_loss < best_valid_loss:

@@ -18,9 +18,14 @@ import os
 import json
 import torch
 from sklearn.model_selection import train_test_split
-from torch.utils.data import (TensorDataset,)
+
+from transformers import BertTokenizer
+from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
 
 from textutils import load_text_labels, tokenize, encode, load_pretrained_vectors
+
+from nlp.data_processing import LoadingData
+
 
 _DATASETS = {}
 
@@ -380,5 +385,62 @@ def text_cnn(root):
 
     return train_data, val_data
 
+@_add_dataset
+def benchmark_data(root):
+    ld = LoadingData()
+    train_df = ld.train_data_frame
+    label_map, id2label = ld.intent_to_cat, ld.cat_to_intent
+
+    train_text, val_text, train_labels, val_labels = train_test_split(train_df['query'], train_df['category'],
+                                                                      random_state=2018,
+                                                                      test_size=0.2,
+                                                                      stratify=train_df['category'])
+
+    # Load the BERT tokenizer
+    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", )
+    seq_len = [len(i.split()) for i in train_text]
+    max_seq_len = max(seq_len)
+
+    # tokenize and encode sequences in the training set
+    if max_seq_len > 512:
+        max_seq_len = 512
+    tokens_train = tokenizer.batch_encode_plus(
+        train_text.tolist(),
+        max_length=max_seq_len,
+        pad_to_max_length=True,
+        truncation=True,
+        return_token_type_ids=False
+    )
+
+    # tokenize and encode sequences in the validation set
+    tokens_val = tokenizer.batch_encode_plus(
+        val_text.tolist(),
+        max_length=max_seq_len,
+        pad_to_max_length=True,
+        truncation=True,
+        return_token_type_ids=False
+    )
+
+    # for train set
+    train_seq = torch.tensor(tokens_train['input_ids'])
+    train_mask = torch.tensor(tokens_train['attention_mask'])
+    train_y = torch.tensor(train_labels.tolist())
+    print("train_y:", train_y)
+    # for validation set
+    val_seq = torch.tensor(tokens_val['input_ids'])
+    val_mask = torch.tensor(tokens_val['attention_mask'])
+    val_y = torch.tensor(val_labels.tolist())
+    print("val_y:", val_y)
+    # define a batch size
+    batch_size = 16
+
+    # wrap tensors
+    train_data = TensorDataset(train_seq, train_mask, train_y)
+    # wrap tensors
+    val_data = TensorDataset(val_seq, val_mask, val_y)
+
+    return train_data, val_data,label_map, id2label
+
+    pass
 def get_dataset(root, config=None):
     return _DATASETS[config.name](os.path.expanduser(root), config)

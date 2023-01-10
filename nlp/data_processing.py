@@ -5,8 +5,8 @@ import json
 class LoadingData():
     def __init__(self):
         print(f"where? {os.getcwd()}")
-        train_file_path = os.path.join("../data","benchmarking_data", "Train")
-        validation_file_path = os.path.join("../data","benchmarking_data", "Validate")
+        train_file_path = os.path.join("./data","benchmarking_data", "Train")
+        validation_file_path = os.path.join("./data","benchmarking_data", "Validate")
         category_id = 0
         self.cat_to_intent = {}
         self.intent_to_cat = {}

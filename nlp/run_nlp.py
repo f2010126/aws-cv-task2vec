@@ -23,7 +23,7 @@ warnings.filterwarnings('ignore')
 
 # local import
 from data_processing import LoadingData
-from nlp_model import BERT_Arch
+from nlp_model import BERT_Arch, BERT
 from train_nlp_model import training_loop
 
 if __name__ == '__main__':
@@ -105,7 +105,8 @@ if __name__ == '__main__':
         param.requires_grad = False
 
     # pass the pre-trained BERT to our define architecture
-    model = BERT_Arch(bert, label_map)
+    #model = BERT_Arch(bert, label_map)
+    model=BERT()
 
     # push the model to GPU
     model = model.to(device)
@@ -127,11 +128,11 @@ if __name__ == '__main__':
     # loss function
     # optional argument weight should be a 1D Tensor assigning weight to each of the classes
     # useful when you have an unbalanced training set.
+    #loss_fn = nn.NLLLoss(weight=weights)
     loss_fn = nn.NLLLoss()
-
     # number of training epochs
     epochs = 2
-    training_loop(model, optimizer, label_map, id2label, epochs,train_dataloader, loss_fn, device)
+    training_loop(model, optimizer, label_map, id2label, epochs,train_dataloader, loss_fn,val_dataloader, device)
 
 
 

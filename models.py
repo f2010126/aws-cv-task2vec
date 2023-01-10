@@ -52,7 +52,7 @@ class ResNet(resnet.ResNet, ProbeNetwork):
 
     # Modified forward method that allows to start feeding the cached activations from an intermediate
     # layer of the network
-    def forward(self, x, start_from=0):
+    def forward(self, x, start_from=0,**kwargs):
         """Replaces the default forward so that we can forward features starting from any intermediate layer."""
         for layer in self.layers[start_from:]:
             x = layer(x)
@@ -214,3 +214,6 @@ def cnn_text(pretrained=False, num_classes=1000, **kwargs):
                         dropout=0.5)
 
     return cnn_model
+
+
+
