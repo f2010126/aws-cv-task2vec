@@ -1,10 +1,10 @@
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import numpy as np
 import torch
 from sklearn.metrics import f1_score
 
+
 # function to train the model
-def train(model,train_dataloader,device,cross_entropy, optimizer):
+def train(model, train_dataloader, device, cross_entropy, optimizer):
     model.train()
 
     total_loss, total_accuracy = 0, 0
@@ -41,7 +41,7 @@ def train(model,train_dataloader,device,cross_entropy, optimizer):
         # backward pass to calculate the gradients
         loss.backward()
 
-        # clip the the gradients to 1.0. It helps in preventing the exploding gradient problem
+        # clip the gradients to 1.0. It helps in preventing the exploding gradient problem
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 
         # update parameters
@@ -66,7 +66,7 @@ def train(model,train_dataloader,device,cross_entropy, optimizer):
 
 
 # function for evaluating the model
-def evaluate(model,val_dataloader,device,cross_entropy):
+def evaluate(model, val_dataloader, device, cross_entropy):
     print("\nEvaluating...")
 
     # deactivate dropout layers
@@ -117,16 +117,19 @@ def evaluate(model,val_dataloader,device,cross_entropy):
     f1 = f1_score(total_labels, total_preds, average='weighted')
     return avg_loss, f1
 
+
 def save_checkpoint(filename, epoch, model, optimizer, label_map, id2label):
     state = {
         'epoch': epoch,
         'model': model,
         'optimizer': optimizer,
         'label_map': label_map,
-        'id_map':id2label}
+        'id_map': id2label}
     torch.save(state, filename)
 
-def training_loop(model, optimizer, label_map, id2label,epochs,train_dataloader,cross_entropy, val_dataloader, device):
+
+def training_loop(model, optimizer, label_map, id2label, epochs, train_dataloader, cross_entropy, val_dataloader,
+                  device):
     # set initial loss to infinite
     best_valid_loss = float('inf')
 
@@ -140,10 +143,10 @@ def training_loop(model, optimizer, label_map, id2label,epochs,train_dataloader,
         print('\n Epoch {:} / {:}'.format(epoch + 1, epochs))
 
         # train model
-        train_loss, f1_train = train(model,train_dataloader, device, cross_entropy,optimizer)
+        train_loss, f1_train = train(model, train_dataloader, device, cross_entropy, optimizer)
 
         # evaluate model
-        valid_loss, f1_valid = evaluate(model,val_dataloader,device,cross_entropy)
+        valid_loss, f1_valid = evaluate(model, val_dataloader, device, cross_entropy)
 
         # save the best model
         if valid_loss < best_valid_loss:
