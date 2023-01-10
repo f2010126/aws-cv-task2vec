@@ -2,9 +2,10 @@ from transformers import BertModel
 import torch.nn as nn
 from task2vec_nlp import ProbeNetwork
 
-class BERT_Arch(ProbeNetwork):
+
+class BERTArch(ProbeNetwork):
     def __init__(self, bert, label_map):
-        super(BERT_Arch, self).__init__()
+        super(BERTArch, self).__init__()
         self.bert = bert
 
         # dropout layer
@@ -69,14 +70,14 @@ class BERT(ProbeNetwork):
         self.out = nn.Linear(512, 7)
 
         # define the forward pass
-        self.layers=[self.bert_model,self.fc1, self.out]
-
+        self.layers = [self.bert_model, self.fc1, self.out]
 
     @property
     def classifier(self):
         return self.out
-    def forward(self,**kwargs ):
-        calculate_fim=kwargs['enable_fim']
+
+    def forward(self, **kwargs):
+        calculate_fim = kwargs['enable_fim']
         if calculate_fim:
             """Replaces the default forward so that we can forward features starting from any intermediate layer."""
             x = kwargs['x']
@@ -84,12 +85,10 @@ class BERT(ProbeNetwork):
             x = self.out(x)
             return x
         else:
-            input_ids =kwargs['input_ids']
-            mask=kwargs['mask']
+            input_ids = kwargs['input_ids']
+            mask = kwargs['mask']
             outputs = self.bert_model(input_ids=input_ids, attention_mask=mask)
             pooler_output = outputs['pooler_output']
             out = self.fc1(pooler_output)
             out = self.out(out)
             return out
-
-

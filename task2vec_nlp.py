@@ -54,6 +54,7 @@ class ProbeNetwork(ABC, nn.Module):
         raise NotImplementedError("Override the classifier setter to set the submodules of the network that"
                                   " should be interpreted as the classifier")
 
+
 # In theory, it should work for all so.
 class Task2VecNLP:
 
@@ -270,16 +271,13 @@ class Task2VecNLP:
             targets.append(labels.clone())
             self.model(input_ids=sent_id, mask=mask, enable_fim=False)
 
-
         for hook in hooks:
             hook.remove()
 
         for index in indexes:
-            self.model.layers[index].input_features = torch.cat(self.model.layers[index].input_features) # add a
+            self.model.layers[index].input_features = torch.cat(self.model.layers[index].input_features)  # add a
 
-
-
-        self.model.layers[-1].targets = torch.cat(targets) # add a prop to the classifier
+        self.model.layers[-1].targets = torch.cat(targets)  # add a prop to the classifier
 
     def _fit_classifier(self, optimizer='adamW', learning_rate=0.0004, weight_decay=0.0001,
                         epochs=10):

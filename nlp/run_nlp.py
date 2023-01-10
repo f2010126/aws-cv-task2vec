@@ -1,30 +1,22 @@
-import numpy as np # linear algebra
-import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
-import json
-import os
-from sklearn.metrics import roc_curve
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import f1_score
+import numpy as np  # linear algebra
 from sklearn.utils.class_weight import compute_class_weight
-from sklearn.model_selection import train_test_split
 import torch
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
-import transformers
 from transformers import BertModel, BertTokenizer
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
 from transformers import AdamW
 import nltk
-nltk.download("all",quiet=False)
 import warnings
-warnings.filterwarnings('ignore')
-
 
 # local import
 from data_processing import LoadingData
-from nlp_model import BERT_Arch, BERT
+from nlp_model import BERTArch, BERT
 from train_nlp_model import training_loop
+
+nltk.download("all", quiet=False)
+warnings.filterwarnings('ignore')
+
 
 if __name__ == '__main__':
     # specify GPU
@@ -105,8 +97,8 @@ if __name__ == '__main__':
         param.requires_grad = False
 
     # pass the pre-trained BERT to our define architecture
-    #model = BERT_Arch(bert, label_map)
-    model=BERT()
+    # model = BERT_Arch(bert, label_map)
+    model = BERT()
 
     # push the model to GPU
     model = model.to(device)
@@ -128,15 +120,8 @@ if __name__ == '__main__':
     # loss function
     # optional argument weight should be a 1D Tensor assigning weight to each of the classes
     # useful when you have an unbalanced training set.
-    #loss_fn = nn.NLLLoss(weight=weights)
+    # loss_fn = nn.NLLLoss(weight=weights)
     loss_fn = nn.NLLLoss()
     # number of training epochs
     epochs = 2
-    training_loop(model, optimizer, label_map, id2label, epochs,train_dataloader, loss_fn,val_dataloader, device)
-
-
-
-
-
-
-
+    training_loop(model, optimizer, label_map, id2label, epochs, train_dataloader, loss_fn, val_dataloader, device)

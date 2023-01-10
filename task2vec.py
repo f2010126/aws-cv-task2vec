@@ -242,10 +242,8 @@ class Task2Vec:
                 layer.input_features = []
             layer.input_features.append(inputs[0].data.cpu().clone())
 
-        # the -1 layer aka last layer and classifier has
         hooks = [self.model.layers[index].register_forward_pre_hook(_hook)
                  for index in indexes]
-
         if max_samples is not None:
             n_batches = min(
                 math.floor(max_samples / data_loader.batch_size) - 1, len(data_loader))
@@ -253,8 +251,7 @@ class Task2Vec:
             n_batches = len(data_loader)
         targets = []
 
-        for i, (input, target) in tqdm(enumerate(itertools.islice(data_loader, 0, 1)),
-                                       total=1,
+        for i, (input, target) in tqdm(enumerate(itertools.islice(data_loader, 0, n_batches)), total=n_batches,
                                        leave=False,
                                        desc="Caching features"):
             targets.append(target.clone())
@@ -262,12 +259,6 @@ class Task2Vec:
         for hook in hooks:
             hook.remove()
         for index in indexes:
-            # needs tuple of tensors
-            # if not isinstance(self.model.layers[index].input_features, list):
-            #     input_feat = [self.model.layers[index].input_features,]
-            # else:
-            #     input_feat = self.model.layers[index].input_features
-            # convert the input features into tensors.
             self.model.layers[index].input_features = torch.cat(self.model.layers[index].input_features)
         self.model.layers[-1].targets = torch.cat(targets)
 
@@ -305,8 +296,7 @@ class Task2Vec:
 
     def extract_embedding(self, model: ProbeNetwork):
         """
-        Reads the values stored by `compute_fisher` and
-        returns them in a common format that describes the diagonal of the
+        Reads the values stored by `compute_fisher` and returns them in a common format that describes the diagonal of the
         Fisher Information Matrix for each layer.
 
         :param model:
