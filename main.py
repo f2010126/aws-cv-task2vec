@@ -18,7 +18,7 @@ import pickle
 import hydra
 import logging
 
-from datasets import get_dataset
+from task2vec_datasets import get_dataset
 from models import get_model
 
 from task2vec import Task2Vec

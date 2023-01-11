@@ -18,12 +18,12 @@ import os
 import json
 import torch
 from sklearn.model_selection import train_test_split
-
+import pandas as pd
 from transformers import BertTokenizer
-from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
-
+from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler,random_split
+from transformers import AutoTokenizer
 from textutils import load_text_labels, tokenize, encode, load_pretrained_vectors
-
+from datasets import load_dataset
 from nlp.data_processing import LoadingData
 
 
@@ -386,6 +386,79 @@ def text_cnn(root):
     return train_data, val_data
 
 @_add_dataset
+def tenKGNAD(root):
+    df = pd.read_csv("https://raw.githubusercontent.com/tblock/10kGNAD/master/articles.csv",
+                     encoding="utf-8",
+                     delimiter=";",
+                     quotechar="'", names=["label", "text"])
+
+    texts = df.text.values
+    label_cats = df.label.astype('category').cat
+
+    # List of label names (str)
+    label_names = label_cats.categories
+
+    # List of label ids (int, in range (0,num_classes-1))
+    labels = label_cats.codes
+
+    # TOKENIZE
+    model_name = "bert-base-german-cased"
+    MAX_INPUT_LENGTH = 192
+
+    # Load the pretrained BERT tokenizer.
+    print(f"Loading {model_name} tokenizer...")
+    tokenizer = AutoTokenizer.from_pretrained(model_name, do_lower_case=False)
+
+    # Tokenize all of the sentences and map the tokens to their word IDs
+    input_ids = []
+    attention_masks = []
+
+    for text in texts:
+        encoded_dict = tokenizer.encode_plus(
+            text,
+            add_special_tokens=True,
+            max_length=MAX_INPUT_LENGTH,
+            pad_to_max_length=True,
+            return_attention_mask=True,
+            return_tensors='pt')
+
+        input_ids.append(encoded_dict['input_ids'])
+        attention_masks.append(encoded_dict['attention_mask'])
+
+        # Convert the lists into tensors.
+    input_ids = torch.cat(input_ids, dim=0)
+    attention_masks = torch.cat(attention_masks, dim=0)
+    labels = torch.tensor(labels, dtype=torch.long)
+
+    # Tensor DataSet
+    # Combine the training inputs into a TensorDataset.
+    dataset = TensorDataset(input_ids, attention_masks, labels)
+
+    # Create a 80-10-10 train-validation-test split
+
+    # Calculate the number of samples to include in each set.
+    train_size = int(0.8 * len(dataset))
+    val_size = int(0.1 * len(dataset))
+    test_size = len(dataset) - train_size - val_size
+
+    # Divide the dataset by randomly selecting samples.
+    train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
+    return train_dataset, val_dataset,label_names
+
+
+@_add_dataset
+def sb_10k(root):
+    dataset = load_dataset("tyqiangz/multilingual-sentiments")
+    model_name = "bert-base-german-cased"
+    MAX_INPUT_LENGTH = 192
+
+    # Load the pretrained BERT tokenizer.
+    print(f"Loading {model_name} tokenizer...")
+    tokenizer = AutoTokenizer.from_pretrained(model_name, do_lower_case=False)
+
+    pass
+
+@_add_dataset
 def benchmark_data(root):
     ld = LoadingData()
     train_df = ld.train_data_frame
@@ -432,7 +505,6 @@ def benchmark_data(root):
     val_y = torch.tensor(val_labels.tolist())
     print("val_y:", val_y)
     # define a batch size
-    batch_size = 16
 
     # wrap tensors
     train_data = TensorDataset(train_seq, train_mask, train_y)
@@ -441,6 +513,6 @@ def benchmark_data(root):
 
     return train_data, val_data,label_map, id2label
 
-    pass
+
 def get_dataset(root, config=None):
     return _DATASETS[config.name](os.path.expanduser(root), config)

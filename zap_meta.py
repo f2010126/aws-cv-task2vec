@@ -1,12 +1,12 @@
 from task2vec import Task2Vec
 from task2vec_nlp import Task2VecNLP
 from models import get_model
-import datasets
-from datasets import benchmark_data
+import task2vec_datasets
+from task2vec_datasets import benchmark_data, tenKGNAD
 import task_similarity
 from transformers import BertModel
 import torch
-from nlp.nlp_model import BERT_Arch, BERT
+from nlp.nlp_model import BERTArch, BERT
 
 
 
@@ -14,7 +14,7 @@ def small_data():
     # ('stl10', 'mnist', 'cifar10', 'cifar100', 'letters', 'kmnist')
     dataset_names = ('stl10', 'mnist', 'cifar10', 'cifar100', 'letters', 'kmnist')
     # Change `root` with the directory you want to use to download the datasets
-    dataset_list = [datasets.__dict__[name](root='./data')[0] for name in dataset_names]
+    dataset_list = [task2vec_datasets.__dict__[name](root='./data')[0] for name in dataset_names]
 
     embeddings = []
     for name, dataset in zip(dataset_names, dataset_list):
