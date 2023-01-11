@@ -235,7 +235,7 @@ class Task2VecNLP:
         if loader_opts is None:
             loader_opts = {}
         data_loader = DataLoader(dataset, shuffle=False, batch_size=loader_opts.get('batch_size', 16),
-                                 num_workers=loader_opts.get('num_workers', 6), drop_last=False)
+                                 num_workers=loader_opts.get('num_workers', 2), drop_last=False)
 
         device = next(self.model.parameters()).device
 

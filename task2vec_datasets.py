@@ -20,11 +20,11 @@ import torch
 from sklearn.model_selection import train_test_split
 import pandas as pd
 from transformers import BertTokenizer
-from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler,random_split
+from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler, random_split
 from transformers import AutoTokenizer
 from textutils import load_text_labels, tokenize, encode, load_pretrained_vectors
 from nlp.data_processing import LoadingData
-from datasets import get_dataset_config_names,load_dataset
+from datasets import get_dataset_config_names, load_dataset
 
 _DATASETS = {}
 
@@ -351,14 +351,13 @@ def stl10(root):
     return trainset, testset
 
 
-
 @_add_dataset
 def text_cnn(root):
     # tokenising, encoding etc has been done
     # return the trainset and test set here.  TensorDataset
     # Tokenize data
     print("Tokenizing...\n")
-    texts, labels = load_text_labels(root = 'data')
+    texts, labels = load_text_labels(root='data')
     tokenized_texts, word2idx, max_len = tokenize(texts)
     input_ids = encode(tokenized_texts, word2idx, max_len)
     # Load pretrained vectors
@@ -380,9 +379,10 @@ def text_cnn(root):
     train_data.targets = train_labels
     val_data.targets = val_labels
 
-    train_data.pretrained_embedding=embeddings
+    train_data.pretrained_embedding = embeddings
 
     return train_data, val_data
+
 
 @_add_dataset
 def tenKGNAD(root):
@@ -442,16 +442,14 @@ def tenKGNAD(root):
 
     # Divide the dataset by randomly selecting samples.
     train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
-    return train_dataset, val_dataset,label_names
+    return train_dataset, val_dataset, label_names
 
 
-
-
-def makedataset_sb_10k(hf_dataset):
+def makedataset_hf(hf_dataset, drop_columns, label_column):
     df = pd.DataFrame(hf_dataset)
-    df.drop('source', axis=1)
+    df.drop(drop_columns, axis=1)
     texts = df.text.values
-    label_cats = df.label.astype('category').cat
+    label_cats = df.label.astype(label_column).cat
     # List of label names (str)
     label_names = label_cats.categories
 
@@ -484,16 +482,31 @@ def makedataset_sb_10k(hf_dataset):
 
     dataset = TensorDataset(input_ids, attention_masks, labels)
 
-    return dataset,label_names
+    return dataset, label_names
 
 
 @_add_dataset
 def sb_10k(root='./'):
     dataset_train = load_dataset('tyqiangz/multilingual-sentiments', 'german', split='train')
-    train_dataset, _ = makedataset_sb_10k(dataset_train)
+    train_dataset, _ = makedataset_hf(dataset_train, drop_columns=['source'], label_column='category')
 
     dataset_val = load_dataset('tyqiangz/multilingual-sentiments', 'german', split='validation')
-    val_dataset, label_names = makedataset_sb_10k(dataset_val)
+    val_dataset, label_names = makedataset_hf(dataset_val, drop_columns=['source'], label_column='category')
+
+    return train_dataset, val_dataset, label_names
+
+
+@_add_dataset
+def amazon_reviews_multi(root='./'):
+    dataset_train = load_dataset("amazon_reviews_multi", 'de', split='train')
+    train_dataset, _ = makedataset_hf(dataset_train,
+                                      drop_columns=['language', 'reviewer_id', 'product_id', 'review_id'],
+                                      label_column='product_category')
+
+    dataset_val = load_dataset("amazon_reviews_multi", 'de', split='validation')
+    val_dataset, label_names = makedataset_hf(dataset_val,
+                                              drop_columns=['language', 'reviewer_id', 'product_id', 'review_id'],
+                                              label_column='product_category')
 
     return train_dataset, val_dataset, label_names
 
@@ -551,7 +564,7 @@ def benchmark_data(root):
     # wrap tensors
     val_data = TensorDataset(val_seq, val_mask, val_y)
 
-    return train_data, val_data,label_map, id2label
+    return train_data, val_data, label_map, id2label
 
 
 def get_dataset(root, config=None):
