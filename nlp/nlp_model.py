@@ -63,11 +63,11 @@ class BERTArch(ProbeNetwork):
 
 
 class BERT(ProbeNetwork):
-    def __init__(self):
+    def __init__(self,classes):
         super(BERT, self).__init__()
         self.bert_model = BertModel.from_pretrained("bert-base-uncased")
         self.fc1 = nn.Linear(768, 512)
-        self.out = nn.Linear(512, 7)
+        self.out = nn.Linear(512, classes)
 
         # define the forward pass
         self.layers = [self.bert_model, self.fc1, self.out]

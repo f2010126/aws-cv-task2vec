@@ -23,9 +23,8 @@ from transformers import BertTokenizer
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler,random_split
 from transformers import AutoTokenizer
 from textutils import load_text_labels, tokenize, encode, load_pretrained_vectors
-from datasets import load_dataset
 from nlp.data_processing import LoadingData
-
+from datasets import get_dataset_config_names,load_dataset
 
 _DATASETS = {}
 
@@ -446,17 +445,58 @@ def tenKGNAD(root):
     return train_dataset, val_dataset,label_names
 
 
-@_add_dataset
-def sb_10k(root):
-    dataset = load_dataset("tyqiangz/multilingual-sentiments")
+
+
+def makedataset_sb_10k(hf_dataset):
+    df = pd.DataFrame(hf_dataset)
+    df.drop('source', axis=1)
+    texts = df.text.values
+    label_cats = df.label.astype('category').cat
+    # List of label names (str)
+    label_names = label_cats.categories
+
+    # List of label ids (int, in range (0,num_classes-1))
+    labels = label_cats.codes
+
     model_name = "bert-base-german-cased"
     MAX_INPUT_LENGTH = 192
 
-    # Load the pretrained BERT tokenizer.
-    print(f"Loading {model_name} tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(model_name, do_lower_case=False)
+    input_ids = []
+    attention_masks = []
 
-    pass
+    for text in texts:
+        encoded_dict = tokenizer.encode_plus(
+            text,
+            add_special_tokens=True,
+            max_length=MAX_INPUT_LENGTH,
+            pad_to_max_length=True,
+            return_attention_mask=True,
+            return_tensors='pt')
+
+        input_ids.append(encoded_dict['input_ids'])
+        attention_masks.append(encoded_dict['attention_mask'])
+
+        # Convert the lists into tensors.
+    input_ids = torch.cat(input_ids, dim=0)
+    attention_masks = torch.cat(attention_masks, dim=0)
+    labels = torch.tensor(labels, dtype=torch.long)
+
+    dataset = TensorDataset(input_ids, attention_masks, labels)
+
+    return dataset,label_names
+
+
+@_add_dataset
+def sb_10k(root='./'):
+    dataset_train = load_dataset('tyqiangz/multilingual-sentiments', 'german', split='train')
+    train_dataset, _ = makedataset_sb_10k(dataset_train)
+
+    dataset_val = load_dataset('tyqiangz/multilingual-sentiments', 'german', split='validation')
+    val_dataset, label_names = makedataset_sb_10k(dataset_val)
+
+    return train_dataset, val_dataset, label_names
+
 
 @_add_dataset
 def benchmark_data(root):

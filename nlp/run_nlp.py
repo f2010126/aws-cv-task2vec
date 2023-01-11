@@ -98,7 +98,7 @@ if __name__ == '__main__':
 
     # pass the pre-trained BERT to our define architecture
     # model = BERT_Arch(bert, label_map)
-    model = BERT()
+    model = BERT(classes=len(label_map))
 
     # push the model to GPU
     model = model.to(device)
