@@ -206,6 +206,7 @@ def plot_distance_matrix(embeddings, labels=None, distance='cosine'):
     import pandas as pd
     import matplotlib.pyplot as plt
     distance_matrix = pdist(embeddings, distance=distance)
+    print(distance_matrix)
     cond_distance_matrix = squareform(distance_matrix, checks=False)
     linkage_matrix = linkage(cond_distance_matrix, method='complete', optimal_ordering=True)
     if labels is not None:

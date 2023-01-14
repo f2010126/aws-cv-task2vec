@@ -125,6 +125,7 @@ class Task2VecNLP:
                 else:
                     target = torch.multinomial(F.softmax(output, dim=-1), 1).detach().view(-1)
                 loss = self.loss_fn(output, target)
+                # TODO: log the loss
                 self.model.zero_grad()
                 loss.backward()
                 for p in self.model.parameters():
@@ -154,6 +155,7 @@ class Task2VecNLP:
             loss += lz
 
             error = get_error(output, target)
+            # TODO: log the loss and error
 
             metrics.update(n=input.size(0), loss=loss.item(), lz=lz.item(), error=error)
             if train:
@@ -254,7 +256,7 @@ class Task2VecNLP:
         else:
             n_batches = len(data_loader)
         targets = []
-
+        # TODO: log the number of samples
         for step, batch in enumerate(data_loader):
             # progress update after every 10 batches.
             if step >= 100:
@@ -309,6 +311,7 @@ class Task2VecNLP:
                 output = self.model.classifier(data)
                 loss = loss_fn(self.model.classifier(data), target)
                 error = get_error(output, target)
+                # TODO: log the loss and accuracy
                 loss.backward()
                 optimizer.step()
                 metrics.update(n=data.size(0), loss=loss.item(), error=error)

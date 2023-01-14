@@ -14,7 +14,7 @@
 import itertools
 import math
 from abc import ABC, abstractmethod
-
+import wandb
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -125,6 +125,7 @@ class Task2Vec:
                 loss = self.loss_fn(output, target)
                 self.model.zero_grad()
                 loss.backward()
+                wandb.log({"loss_montecarlo_fisher": loss})
                 for p in self.model.parameters():
                     if p.grad is not None:
                         p.grad2_acc += p.grad.data ** 2
@@ -152,6 +153,9 @@ class Task2Vec:
             loss += lz
 
             error = get_error(output, target)
+            wandb.log({"loss_variational_fisher": loss})
+            wandb.log({"error_variational_fisher": error})
+
 
             metrics.update(n=input.size(0), loss=loss.item(), lz=lz.item(), error=error)
             if train:
@@ -289,6 +293,8 @@ class Task2Vec:
                 output = self.model.classifier(data)
                 loss = loss_fn(self.model.classifier(data), target)
                 error = get_error(output, target)
+                wandb.log({"loss_train_classifier": loss})
+                wandb.log({"error_train_classifier": error})
                 loss.backward()
                 optimizer.step()
                 metrics.update(n=data.size(0), loss=loss.item(), error=error)

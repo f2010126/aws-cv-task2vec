@@ -24,7 +24,7 @@ from torch.utils.data import TensorDataset, DataLoader, RandomSampler, Sequentia
 from transformers import AutoTokenizer
 from textutils import load_text_labels, tokenize, encode, load_pretrained_vectors
 from nlp.data_processing import LoadingData
-from datasets import get_dataset_config_names, load_dataset
+from datasets import load_dataset
 
 _DATASETS = {}
 
@@ -350,40 +350,6 @@ def stl10(root):
     testset.targets = testset.labels
     return trainset, testset
 
-
-@_add_dataset
-def text_cnn(root):
-    # tokenising, encoding etc has been done
-    # return the trainset and test set here.  TensorDataset
-    # Tokenize data
-    print("Tokenizing...\n")
-    texts, labels = load_text_labels(root='data')
-    tokenized_texts, word2idx, max_len = tokenize(texts)
-    input_ids = encode(tokenized_texts, word2idx, max_len)
-    # Load pretrained vectors
-    print("Load Vectors...\n")
-    embedding_path = os.path.join(os.getcwd(), 'embeddings', 'crawl-300d-2M.vec')
-    embeddings = load_pretrained_vectors(word2idx, embedding_path)
-    embeddings = torch.tensor(embeddings)
-
-    train_inputs, val_inputs, train_labels, val_labels = train_test_split(
-        input_ids, labels, test_size=0.1, random_state=42)
-
-    # Convert data type to torch.Tensor
-    train_inputs, val_inputs, train_labels, val_labels = \
-        tuple(torch.tensor(data) for data in
-              [train_inputs, val_inputs, train_labels, val_labels])
-
-    train_data = TensorDataset(train_inputs, train_labels)
-    val_data = TensorDataset(val_inputs, val_labels)
-    train_data.targets = train_labels
-    val_data.targets = val_labels
-
-    train_data.pretrained_embedding = embeddings
-
-    return train_data, val_data
-
-
 @_add_dataset
 def tenKGNAD(root):
     df = pd.read_csv("https://raw.githubusercontent.com/tblock/10kGNAD/master/articles.csv",
@@ -392,7 +358,7 @@ def tenKGNAD(root):
                      quotechar="'", names=["label", "text"])
 
     texts = df.text.values
-    label_cats = df.label.astype('category').cat
+    label_cats = df.label.astype('category').cat # cast as a categorical variable
 
     # List of label names (str)
     label_names = label_cats.categories
@@ -445,11 +411,11 @@ def tenKGNAD(root):
     return train_dataset, val_dataset, label_names
 
 
-def makedataset_hf(hf_dataset, drop_columns, label_column):
+def makedataset_hf(hf_dataset, drop_columns, label_column, data_column):
     df = pd.DataFrame(hf_dataset)
-    df.drop(drop_columns, axis=1)
-    texts = df.text.values
-    label_cats = df.label.astype(label_column).cat
+    df = df.drop(drop_columns, axis=1)
+    texts = df[data_column].values
+    label_cats = df[label_column].astype('category').cat
     # List of label names (str)
     label_names = label_cats.categories
 
@@ -488,10 +454,10 @@ def makedataset_hf(hf_dataset, drop_columns, label_column):
 @_add_dataset
 def sb_10k(root='./'):
     dataset_train = load_dataset('tyqiangz/multilingual-sentiments', 'german', split='train')
-    train_dataset, _ = makedataset_hf(dataset_train, drop_columns=['source'], label_column='category')
+    train_dataset, _ = makedataset_hf(dataset_train, drop_columns=['source'], label_column='label', data_column='text')
 
     dataset_val = load_dataset('tyqiangz/multilingual-sentiments', 'german', split='validation')
-    val_dataset, label_names = makedataset_hf(dataset_val, drop_columns=['source'], label_column='category')
+    val_dataset, label_names = makedataset_hf(dataset_val, drop_columns=['source'], label_column='label',data_column='text')
 
     return train_dataset, val_dataset, label_names
 
@@ -501,14 +467,30 @@ def amazon_reviews_multi(root='./'):
     dataset_train = load_dataset("amazon_reviews_multi", 'de', split='train')
     train_dataset, _ = makedataset_hf(dataset_train,
                                       drop_columns=['language', 'reviewer_id', 'product_id', 'review_id'],
-                                      label_column='product_category')
+                                      label_column='product_category', data_column='review_body')
 
     dataset_val = load_dataset("amazon_reviews_multi", 'de', split='validation')
     val_dataset, label_names = makedataset_hf(dataset_val,
                                               drop_columns=['language', 'reviewer_id', 'product_id', 'review_id'],
-                                              label_column='product_category')
+                                              label_column='product_category',data_column='review_body')
 
     return train_dataset, val_dataset, label_names
+
+
+@_add_dataset
+def cardiffnlp(root='./'):
+    dataset_train = load_dataset("cardiffnlp/tweet_sentiment_multilingual",'german', split='train')
+    train_dataset, _ = makedataset_hf(dataset_train,
+                                      drop_columns=[],
+                                      label_column='label', data_column='text')
+
+    dataset_val = load_dataset("cardiffnlp/tweet_sentiment_multilingual",'german', split='validation')
+    val_dataset, label_names = makedataset_hf(dataset_val,
+                                              drop_columns=[],
+                                              label_column='label', data_column='text')
+
+    return train_dataset, val_dataset, label_names
+
 
 
 @_add_dataset
