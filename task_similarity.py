@@ -18,7 +18,7 @@ import scipy.spatial.distance as distance
 import numpy as np
 import copy
 import pickle
-
+import wandb
 _DISTANCES = {}
 
 
@@ -215,3 +215,4 @@ def plot_distance_matrix(embeddings, labels=None, distance='cosine'):
     plt.show()
     filename = '1_image_3text'
     fig.savefig(filename)
+    wandb.log({"clustermap": wandb.Image(filename)})

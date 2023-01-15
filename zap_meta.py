@@ -2,14 +2,15 @@ from task2vec import Task2Vec
 from task2vec_nlp import Task2VecNLP
 from models import get_model
 import task2vec_datasets
-from task2vec_datasets import benchmark_data, tenKGNAD, sb_10k, amazon_reviews_multi,cardiffnlp
+from task2vec_datasets_nlp import benchmark_data, tenKGNAD, sb_10k, amazon_reviews_multi, cardiffnlp
 import task_similarity
 import torch
-from nlp.nlp_model import BERTArch, BERT
+from nlp.nlp_model import BERT
 import wandb
 
 
 def small_data():
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # ('stl10', 'mnist', 'cifar10', 'cifar100', 'letters', 'kmnist')
     dataset_names = ('stl10', 'mnist', 'cifar10', 'cifar100', 'letters', 'kmnist')
@@ -26,6 +27,7 @@ def small_data():
             config={
                 "model": 'resnet34',
                 "dataset": name,
+                "device": device,
             }
         )
         probe_network = get_model('resnet34', pretrained=True, num_classes=int(max(dataset.targets) + 1))  # .cuda()
@@ -54,7 +56,7 @@ def text_data():
         embeddings.append(Task2Vec(probe_network, max_samples=1000, skip_layers=2).embed(dataset))
 
 
-def benchmark():
+def meta_nlp():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     train_data, val_data, label_map = cardiffnlp(root='./')
     embeddings = []
@@ -86,8 +88,8 @@ def benchmark():
     embedding_cardiff = Task2VecNLP(probe_network, max_samples=1000, skip_layers=1).embed(train_data)
     embeddings.append(embedding_cardiff)
 
-    task_similarity.plot_distance_matrix(embeddings, ('benchmark', '10kGNAD', 'sb_10k', 'amazon','cardiffnlp'))
+    task_similarity.plot_distance_matrix(embeddings, ('benchmark', '10kGNAD', 'sb_10k', 'amazon', 'cardiffnlp'))
 
 
 if __name__ == '__main__':
-    small_data()
+    meta_nlp()
