@@ -25,6 +25,7 @@ import variational
 from torch.utils.data import DataLoader, Dataset
 from torch.optim.optimizer import Optimizer
 from transformers import AdamW
+import wandb
 from utils import AverageMeter, get_error, get_device
 
 
@@ -126,6 +127,7 @@ class Task2VecNLP:
                     target = torch.multinomial(F.softmax(output, dim=-1), 1).detach().view(-1)
                 loss = self.loss_fn(output, target)
                 # TODO: log the loss
+                wandb.log({"loss_montecarlo_fisher": loss})
                 self.model.zero_grad()
                 loss.backward()
                 for p in self.model.parameters():
@@ -156,6 +158,8 @@ class Task2VecNLP:
 
             error = get_error(output, target)
             # TODO: log the loss and error
+            wandb.log({"loss_variational_fisher": loss})
+            wandb.log({"error_variational_fisher": error})
 
             metrics.update(n=input.size(0), loss=loss.item(), lz=lz.item(), error=error)
             if train:
@@ -312,6 +316,8 @@ class Task2VecNLP:
                 loss = loss_fn(self.model.classifier(data), target)
                 error = get_error(output, target)
                 # TODO: log the loss and accuracy
+                wandb.log({"loss_train_classifier": loss})
+                wandb.log({"error_train_classifier": error})
                 loss.backward()
                 optimizer.step()
                 metrics.update(n=data.size(0), loss=loss.item(), error=error)

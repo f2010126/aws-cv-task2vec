@@ -213,6 +213,6 @@ def plot_distance_matrix(embeddings, labels=None, distance='cosine'):
         distance_matrix = pd.DataFrame(distance_matrix, index=labels, columns=labels)
     fig = sns.clustermap(distance_matrix, row_linkage=linkage_matrix, col_linkage=linkage_matrix, cmap='viridis_r')
     plt.show()
-    filename = '1_image_3text'
+    filename = '1_image_text'
     fig.savefig(filename)
     wandb.log({"clustermap": wandb.Image(filename)})
