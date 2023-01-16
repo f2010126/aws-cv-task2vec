@@ -243,7 +243,7 @@ class Task2VecNLP:
         logging.info("Caching features...")
         if loader_opts is None:
             loader_opts = {}
-        data_loader = DataLoader(dataset, shuffle=False, batch_size=loader_opts.get('batch_size', 16),
+        data_loader = DataLoader(dataset, shuffle=False, batch_size=loader_opts.get('batch_size', 32),
                                  num_workers=loader_opts.get('num_workers', 2), drop_last=False)
 
         device = next(self.model.parameters()).device
@@ -305,7 +305,7 @@ class Task2VecNLP:
         elif optimizer == 'sgd':
             optimizer = torch.optim.SGD(self.model.fc.parameters(), lr=learning_rate, weight_decay=weight_decay)
         elif optimizer == 'adamW':
-            optimizer = AdamW(self.model.classifier.parameters(), lr=1e-3)
+            optimizer = AdamW(self.model.classifier.parameters(), lr=5e-5)
 
         else:
             raise ValueError(f'Unsupported optimizer {optimizer}')
@@ -356,7 +356,7 @@ class Task2VecNLP:
         return Embedding(hessian=np.concatenate(hess), scale=np.concatenate(scale), meta=None)
 
 
-def _get_loader(trainset, testset=None, batch_size=64, num_workers=6, num_samples=10000, drop_last=True):
+def _get_loader(trainset, testset=None, batch_size=32, num_workers=2, num_samples=1000, drop_last=True):
     if getattr(trainset, 'is_multi_label', False):
         raise ValueError("Multi-label datasets not supported")
     # TODO: Find a way to standardize this

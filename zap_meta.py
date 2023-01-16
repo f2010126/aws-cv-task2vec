@@ -1,5 +1,6 @@
 import torch
 import wandb
+import datetime
 from pathlib import Path
 print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
 
@@ -8,7 +9,7 @@ try:
     from nlp.nlp_model import BERT
     import task_similarity
     import task2vec_datasets
-    from task2vec_datasets_nlp import benchmark_data, tenKGNAD, sb_10k, amazon_reviews_multi, cardiffnlp
+    # from task2vec_datasets_nlp import benchmark_data, tenKGNAD, sb_10k, amazon_reviews_multi, cardiffnlp
     from task2vec import Task2Vec
     from task2vec_nlp import Task2VecNLP
     from models import get_model
@@ -31,7 +32,8 @@ def small_data():
         wandb.init(
             # set the wandb project where this run will be logged
             project="Task2VecVision",
-            group=name,
+            group=str(datetime.datetime.now()),
+            job_type=name,
             config={
                 "model": 'resnet34',
                 "dataset": name,
@@ -44,25 +46,6 @@ def small_data():
 
     task_similarity.plot_distance_matrix(embeddings, dataset_names)
     wandb.finish()
-
-
-def text_data():
-    dataset_names = ('text_cnn',)
-    dataset_list = [task2vec_datasets.__dict__[name](root='./data')[0] for name in dataset_names]
-    embeddings = []
-
-    for name, dataset in zip(dataset_names, dataset_list):
-        print(f"Embedding {name}")
-        probe_network = get_model(model_name='cnn_text', pretrained=True,
-                                  pretrained_embedding=dataset.pretrained_embedding,
-                                  freeze_embedding=False,
-                                  vocab_size=None,
-                                  embed_dim=300,
-                                  filter_sizes=[3, 4, 5],
-                                  num_filters=[100, 100, 100],
-                                  num_classes=2, dropout=0.5)  # .cuda()
-        embeddings.append(Task2Vec(probe_network, max_samples=1000, skip_layers=2).embed(dataset))
-
 
 def meta_nlp():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -154,4 +137,4 @@ def meta_nlp():
 
 
 if __name__ == '__main__':
-    meta_nlp()
+    small_data()
