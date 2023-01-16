@@ -27,6 +27,9 @@ from torch.optim.optimizer import Optimizer
 from transformers import AdamW
 import wandb
 from utils import AverageMeter, get_error, get_device
+from pathlib import Path
+print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
+
 
 
 class Embedding:

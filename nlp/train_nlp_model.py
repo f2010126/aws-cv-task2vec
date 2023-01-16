@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 from sklearn.metrics import f1_score
+from pathlib import Path
+print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
 
 
 # function to train the model

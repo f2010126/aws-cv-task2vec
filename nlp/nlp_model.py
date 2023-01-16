@@ -1,11 +1,8 @@
 from transformers import BertModel
 import torch.nn as nn
 from task2vec_nlp import ProbeNetwork
-
-
-class BertArch(ProbeNetwork, BertModel):
-    pass
-
+from pathlib import Path
+print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
 
 class BERT(ProbeNetwork):
     def __init__(self, classes):

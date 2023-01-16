@@ -6,6 +6,8 @@ from torch.utils.data import TensorDataset, random_split
 from transformers import AutoTokenizer
 from nlp.data_processing import LoadingData
 from datasets import load_dataset
+from pathlib import Path
+print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
 
 
 def tenKGNAD(root):

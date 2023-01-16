@@ -23,6 +23,8 @@ from models import get_model
 
 from task2vec import Task2Vec
 from omegaconf import DictConfig, OmegaConf
+from pathlib import Path
+print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
 
 
 @hydra.main(config_path="conf", config_name="config")

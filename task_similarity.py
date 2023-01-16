@@ -19,6 +19,10 @@ import numpy as np
 import copy
 import pickle
 import wandb
+from pathlib import Path
+print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
+
+
 _DISTANCES = {}
 
 

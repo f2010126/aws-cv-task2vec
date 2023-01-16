@@ -17,6 +17,8 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
 import types
+from pathlib import Path
+print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
 
 
 def get_variational_vars(model):

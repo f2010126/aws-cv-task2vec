@@ -1,12 +1,20 @@
-from task2vec import Task2Vec
-from task2vec_nlp import Task2VecNLP
-from models import get_model
-import task2vec_datasets
-from task2vec_datasets_nlp import benchmark_data, tenKGNAD, sb_10k, amazon_reviews_multi, cardiffnlp
-import task_similarity
 import torch
-from nlp.nlp_model import BERT
 import wandb
+from pathlib import Path
+print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
+
+# Local
+try:
+    from nlp.nlp_model import BERT
+    import task_similarity
+    import task2vec_datasets
+    from task2vec_datasets_nlp import benchmark_data, tenKGNAD, sb_10k, amazon_reviews_multi, cardiffnlp
+    from task2vec import Task2Vec
+    from task2vec_nlp import Task2VecNLP
+    from models import get_model
+except ImportError:
+    from task2vec_datasets_nlp import benchmark_data, tenKGNAD, sb_10k, amazon_reviews_multi, cardiffnlp
+
 
 
 def small_data():

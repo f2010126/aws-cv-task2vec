@@ -14,6 +14,8 @@
 from collections import defaultdict
 import torch
 import numpy as np
+from pathlib import Path
+print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
 
 
 class AverageMeter(object):

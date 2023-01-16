@@ -8,10 +8,12 @@ from torch.utils.data import TensorDataset, DataLoader, RandomSampler, Sequentia
 from transformers import AdamW
 import nltk
 import warnings
+from pathlib import Path
+print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
 
 # local import
 from data_processing import LoadingData
-from nlp_model import BERTArch, BERT
+from nlp_model import BERT
 from train_nlp_model import training_loop
 
 nltk.download("all", quiet=False)

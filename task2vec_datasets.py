@@ -16,15 +16,8 @@ import collections
 import torchvision.transforms as transforms
 import os
 import json
-import torch
-from sklearn.model_selection import train_test_split
-import pandas as pd
-from transformers import BertTokenizer
-from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler, random_split
-from transformers import AutoTokenizer
-from textutils import load_text_labels, tokenize, encode, load_pretrained_vectors
-from nlp.data_processing import LoadingData
-from datasets import load_dataset
+from pathlib import Path
+print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
 
 _DATASETS = {}
 

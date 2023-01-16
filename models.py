@@ -21,6 +21,8 @@ import torch.nn.functional as F
 import numpy as np
 
 from task2vec import ProbeNetwork
+from pathlib import Path
+print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
 
 _MODELS = {}
 
