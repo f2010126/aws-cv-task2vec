@@ -1,6 +1,6 @@
 ## Extracting MetaFeatures from Training Data using Task2Vec
 
-The workflow involves extracting the input features of data from intermediate layers of the model  and training the classifier on these features.
+Task2Vec workflow involves extracting the input features of data from intermediate layers of the model and training the classifier on these features.
 Then, the calculated gradients of this training are used to estimate the FIM and feature embeddings. 
 ### **Is having a good classifier needed to generate meaningful embeddings?**
 
