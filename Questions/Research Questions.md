@@ -44,3 +44,7 @@ Sufficiently trained, ie verge of overfitting to test data.
 Eg: Topic classification vs Sentiment Analysis 
 
 ### Failure Case
+
+***
+Comment on: Can the accuracy of the classifier be seen as a proxy for the quality of the embedding?
+
