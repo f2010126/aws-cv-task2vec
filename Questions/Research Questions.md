@@ -3,6 +3,8 @@
 The workflow involves extracting the input features of data from intermediate layers of the model  and training the classifier on these features.
 Then, the calculated gradients of this training are used to estimate the FIM and feature embeddings. 
 
+***
+
 ### Which Feature Layers have the best information for the classifier?
 
 The features obtained from lower layers of the model  are more generalised while higher layers focus on the details of the target task. Deep Models have a lot of layers and it's important to select to optimal range of layers to use to generate embeddings specifc to the dataset. 
@@ -12,6 +14,7 @@ The features obtained from lower layers of the model  are more generalised while
 Vary the layer from where input features are cached for training the classifier. Compare the embeddings obtained for 2 similar, 1 Dissimilar dataset.  
 (I expect the embedding generated using the earlier layers to yield a uniform distance matrix compared to when using the later layers.)
  
+***
 
 ### **Is having a good classifier needed to generate meaningful embeddings?**
 
