@@ -149,6 +149,13 @@ def cardiffnlp(root='./'):
     return train_dataset, val_dataset, label_names
 
 
+def omp(root='./'):
+    dataset_train = load_dataset("omp", 'posts_labeled', split='train')
+    train_dataset, _ = makedataset_hf(dataset_train,
+                                      drop_columns=[],
+                                      label_column='label', data_column='text')
+    pass
+
 def benchmark_data(root):
     ld = LoadingData()
     train_df = ld.train_data_frame

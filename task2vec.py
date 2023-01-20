@@ -239,7 +239,7 @@ class Task2Vec:
         if loader_opts is None:
             loader_opts = {}
         data_loader = DataLoader(dataset, shuffle=False, batch_size=loader_opts.get('batch_size', 64),
-                                 num_workers=loader_opts.get('num_workers', 6), drop_last=False)
+                                 num_workers=loader_opts.get('num_workers', 2), drop_last=False)
 
         device = next(self.model.parameters()).device
 
@@ -331,7 +331,7 @@ class Task2Vec:
         return Embedding(hessian=np.concatenate(hess), scale=np.concatenate(scale), meta=None)
 
 
-def _get_loader(trainset, testset=None, batch_size=64, num_workers=6, num_samples=10000, drop_last=True):
+def _get_loader(trainset, testset=None, batch_size=64, num_workers=2, num_samples=10000, drop_last=True):
     if getattr(trainset, 'is_multi_label', False):
         raise ValueError("Multi-label datasets not supported")
     # TODO: Find a way to standardize this

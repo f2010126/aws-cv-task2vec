@@ -2,6 +2,7 @@ import torch
 import wandb
 import datetime
 from pathlib import Path
+
 print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
 
 # Local
@@ -9,7 +10,7 @@ try:
     from nlp.nlp_model import BERT
     import task_similarity
     import task2vec_datasets
-    # from task2vec_datasets_nlp import benchmark_data, tenKGNAD, sb_10k, amazon_reviews_multi, cardiffnlp
+    from task2vec_datasets_nlp import benchmark_data, tenKGNAD, sb_10k, amazon_reviews_multi, cardiffnlp
     from task2vec import Task2Vec
     from task2vec_nlp import Task2VecNLP
     from models import get_model
@@ -17,8 +18,7 @@ except ImportError:
     from task2vec_datasets_nlp import benchmark_data, tenKGNAD, sb_10k, amazon_reviews_multi, cardiffnlp
 
 
-
-def small_data():
+def small_data(projectname="Task2VecVision"):
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # ('stl10', 'mnist', 'cifar10', 'cifar100', 'letters', 'kmnist')
@@ -31,8 +31,7 @@ def small_data():
         print(f"Embedding {name}")
         wandb.init(
             # set the wandb project where this run will be logged
-            project="Task2VecVision",
-            group=str(datetime.datetime.now()),
+            project=projectname,
             job_type=name,
             config={
                 "model": 'resnet34',
@@ -43,18 +42,27 @@ def small_data():
         probe_network = get_model('resnet34', pretrained=True, num_classes=int(max(dataset.targets) + 1))  # .cuda()
         embeddings.append(Task2Vec(probe_network, max_samples=1000, skip_layers=6).embed(dataset))
         wandb.finish()
-
-    task_similarity.plot_distance_matrix(embeddings, dataset_names)
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project=projectname,
+    )
+    task_similarity.plot_distance_matrix(embeddings, dataset_names,filename='./vision_sets.png')
     wandb.finish()
+
 
 def meta_nlp():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     embeddings = []
+    project_name = f"Task2VecNLP_CrossEntropy"
+    group_name = "Task2VecNLP"
+    notes = "Changed some Params to match BERT's finetune"
 
     wandb.init(
         # set the wandb project where this run will be logged
-        project="Task2VecNLP",
-        group='benchmark_nlp',
+        project=project_name,
+        notes=notes,
+        group=group_name,
+        job_type='benchmark_nlp',
         config={
             "model": 'BERT',
             "dataset": 'benchmark_nlp',
@@ -69,8 +77,9 @@ def meta_nlp():
 
     wandb.init(
         # set the wandb project where this run will be logged
-        project="Task2VecNLP",
-        group='tenKGNAD',
+        project=project_name,
+        group=group_name,
+        job_type='tenKGNAD',
         config={
             "model": 'BERT',
             "dataset": 'tenKGNAD',
@@ -86,8 +95,9 @@ def meta_nlp():
     # Sentiment Corpus Deutsch SB-10k
     wandb.init(
         # set the wandb project where this run will be logged
-        project="Task2VecNLP",
-        group='sb_10k',
+        project=project_name,
+        group=group_name,
+        job_type='sb_10k',
         config={
             "model": 'BERT',
             "dataset": 'sb_10k',
@@ -103,8 +113,9 @@ def meta_nlp():
     # Amazon Multi Reviews (might be Usage?)
     wandb.init(
         # set the wandb project where this run will be logged
-        project="Task2VecNLP",
-        group='amazon_reviews_multi',
+        project=project_name,
+        group=group_name,
+        job_type='amazon_reviews_multi',
         config={
             "model": 'BERT',
             "dataset": 'amazon_reviews_multi',
@@ -119,8 +130,9 @@ def meta_nlp():
 
     wandb.init(
         # set the wandb project where this run will be logged
-        project="Task2VecNLP",
-        group='cardiffnlp',
+        project=project_name,
+        group=group_name,
+        job_type='cardiffnlp',
         config={
             "model": 'BERT',
             "dataset": 'cardiffnlp',
@@ -130,11 +142,14 @@ def meta_nlp():
     train_data, val_data, label_map = cardiffnlp(root='./')
     probe_network = BERT(classes=len(label_map))
     embedding_cardiff = Task2VecNLP(probe_network, max_samples=1000, skip_layers=1).embed(train_data)
-    wandb.finish()
     embeddings.append(embedding_cardiff)
 
-    task_similarity.plot_distance_matrix(embeddings, ('benchmark', '10kGNAD', 'sb_10k', 'amazon', 'cardiffnlp'))
+    task_similarity.plot_distance_matrix(embeddings,
+                                         labels =('benchmark', '10kGNAD', 'sb_10k', 'amazon', 'cardiffnlp'),
+                                         filename='./5_texts_cross.png')
+    wandb.finish()
 
 
 if __name__ == '__main__':
-    small_data()
+    #meta_nlp()
+    small_data(projectname="Task2VecVisionAnnot")

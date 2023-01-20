@@ -288,7 +288,7 @@ class Task2VecNLP:
 
         self.model.layers[-1].targets = torch.cat(targets)  # add a prop to the classifier
 
-    def _fit_classifier(self, optimizer='adamW', learning_rate=0.0004, weight_decay=0.0001,
+    def _fit_classifier(self, optimizer='adamW', learning_rate=5e-5, weight_decay=0.0001,
                         epochs=10):
         """Fits the last layer of the network using the cached features."""
         logging.info("Fitting final classifier...")
@@ -300,12 +300,17 @@ class Task2VecNLP:
         dataset = torch.utils.data.TensorDataset(features, targets)
         data_loader = _get_loader(dataset, **self.loader_opts)
 
+        wandb.config.update({"train_classifier_optimizer": optimizer,
+                             "train_classifier_learningrate": learning_rate,
+                             "train_classifier_weightdecay": weight_decay})
+
         if optimizer == 'adam':
             optimizer = torch.optim.Adam(self.model.fc.parameters(), lr=learning_rate, weight_decay=weight_decay)
+
         elif optimizer == 'sgd':
             optimizer = torch.optim.SGD(self.model.fc.parameters(), lr=learning_rate, weight_decay=weight_decay)
         elif optimizer == 'adamW':
-            optimizer = AdamW(self.model.classifier.parameters(), lr=5e-5)
+            optimizer = AdamW(self.model.classifier.parameters(), lr=5e-5, weight_decay=weight_decay)
 
         else:
             raise ValueError(f'Unsupported optimizer {optimizer}')

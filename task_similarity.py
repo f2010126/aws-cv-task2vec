@@ -203,7 +203,10 @@ def cdist(from_embeddings, to_embeddings, distance='cosine'):
     return distance_matrix
 
 
-def plot_distance_matrix(embeddings, labels=None, distance='cosine'):
+def plot_distance_matrix(embeddings,
+                         labels=None,
+                         distance='cosine',
+                         filename='./1_image_text'):
     import seaborn as sns
     from scipy.cluster.hierarchy import linkage
     from scipy.spatial.distance import squareform
@@ -215,8 +218,11 @@ def plot_distance_matrix(embeddings, labels=None, distance='cosine'):
     linkage_matrix = linkage(cond_distance_matrix, method='complete', optimal_ordering=True)
     if labels is not None:
         distance_matrix = pd.DataFrame(distance_matrix, index=labels, columns=labels)
-    fig = sns.clustermap(distance_matrix, row_linkage=linkage_matrix, col_linkage=linkage_matrix, cmap='viridis_r')
+    fig = sns.clustermap(distance_matrix,
+                         row_linkage=linkage_matrix,
+                         col_linkage=linkage_matrix,
+                         annot=True,
+                         cmap='viridis_r')
     plt.show()
-    filename = '1_image_text'
     fig.savefig(filename)
     wandb.log({"clustermap": wandb.Image(filename)})
