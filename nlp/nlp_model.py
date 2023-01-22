@@ -3,7 +3,7 @@ from transformers import BertModel, BertForSequenceClassification, BertConfig, B
 from transformers.modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, \
     BaseModelOutputWithPoolingAndCrossAttentions
 from transformers.utils import logging
-from transformers.models.bert.modeling_bert import BertEmbeddings, BertPooler, BertLayer
+from transformers.models.bert.modeling_bert import BertEmbeddings, BertPooler, BertLayer, BertEncoder
 
 import torch
 import torch.nn as nn
@@ -52,9 +52,9 @@ Because encoder, pooler and embeddings aren't available to import
 """
 
 
-class BertEncoder(nn.Module):
+class T2VBertEncoder(BertEncoder):
     def __init__(self, config):
-        super().__init__()
+        super(BertEncoder, self).__init__()
         self.config = config
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
@@ -71,13 +71,15 @@ class BertEncoder(nn.Module):
             output_attentions: Optional[bool] = False,
             output_hidden_states: Optional[bool] = False,
             return_dict: Optional[bool] = True,
+            start_from=0,
+            **kwargs
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
         next_decoder_cache = () if use_cache else None
-        for i, layer_module in enumerate(self.layer):
+        for i, layer_module in enumerate(self.layer[start_from:]):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -149,22 +151,37 @@ class BertEncoder(nn.Module):
         )
 
 
-class BertArch(BertModel, ProbeNetwork):
-    def __init__(self, classes, config=BertConfig(), add_pooling_layer=True):
+class T2VBertArch(BertModel, ProbeNetwork):
+    def __init__(self, config=BertConfig(), add_pooling_layer=True):
         super(BertModel, self).__init__(config=config)
         self.config = config
+        self.num_labels = config.num_labels
 
         self.embeddings = BertEmbeddings(config)
-        self.encoder = BertEncoder(config)
+        self.encoder = T2VBertEncoder(config)
 
         self.pooler = BertPooler(config) if add_pooling_layer else None
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
+        self._classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
 
+        self.layers = [
+            self.embeddings,
+            self.encoder,
+            self.pooler,
+            lambda z: torch.flatten(z, 1),
+            self.dropout,
+            self._classifier
+        ]
+
     @property
     def classifier(self):
-        return None
+        return self._classifier
 
     def forward(
             self,
@@ -181,6 +198,8 @@ class BertArch(BertModel, ProbeNetwork):
             output_attentions: Optional[bool] = None,
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
+            start_from=0,
+            **kwargs
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -260,14 +279,17 @@ class BertArch(BertModel, ProbeNetwork):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            start_from=start_from,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            # don't return here
+            outputs = (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPoolingAndCrossAttentions(
+        # don't return here
+        outputs = BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             past_key_values=encoder_outputs.past_key_values,
@@ -275,20 +297,24 @@ class BertArch(BertModel, ProbeNetwork):
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
         )
+        bert_output = outputs[1]
+        bert_output = self.dropout(bert_output)
+        logits = self.classifier(bert_output)
+        return logits
 
 
 def test_model():
     from transformers import BertTokenizer
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    model = BertArch.from_pretrained("bert-base-uncased", num_labels=3)
+    model = T2VBertArch.from_pretrained("bert-base-uncased")
     inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-    outputs = model(**inputs)
+    outputs = model(**inputs, start_from=7)
     return outputs
 
 
 if __name__ == "__main__":
-    model1 = BertModel.from_pretrained("bert-base-uncased", num_labels=3)
+    model1 = BertModel.from_pretrained("bert-base-uncased", num_labels=2)
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
     outputs = model1(**inputs)
