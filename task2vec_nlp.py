@@ -28,8 +28,8 @@ from transformers import AdamW
 import wandb
 from utils import AverageMeter, get_error, get_device
 from pathlib import Path
-print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
 
+print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
 
 
 class Embedding:
@@ -57,6 +57,12 @@ class ProbeNetwork(ABC, nn.Module):
     def classifier(self, val):
         raise NotImplementedError("Override the classifier setter to set the submodules of the network that"
                                   " should be interpreted as the classifier")
+
+
+def _hook(layer, inputs):
+    if not hasattr(layer, 'input_features'):
+        layer.input_features = []
+    layer.input_features.append(inputs[0].data.cpu().clone())
 
 
 # In theory, it should work for all so.
@@ -248,11 +254,6 @@ class Task2VecNLP:
 
         device = next(self.model.parameters()).device
 
-        def _hook(layer, inputs):
-            if not hasattr(layer, 'input_features'):
-                layer.input_features = []
-            layer.input_features.append(inputs[0].data.cpu().clone())
-
         # the -1 layer aka last layer and classifier has
         hooks = [self.model.layers[index].register_forward_pre_hook(_hook)
                  for index in indexes]
@@ -278,7 +279,7 @@ class Task2VecNLP:
             self.model.zero_grad()
 
             targets.append(labels.clone())
-            self.model(input_ids=sent_id, mask=mask, enable_fim=False)
+            self.model(input_ids=sent_id, attention_mask=mask, enable_fim=False)
 
         for hook in hooks:
             hook.remove()
@@ -359,6 +360,9 @@ class Task2VecNLP:
                 hess.append(filterwise_hess)
                 scale.append(np.ones_like(filterwise_hess))
         return Embedding(hessian=np.concatenate(hess), scale=np.concatenate(scale), meta=None)
+
+    def test_classifier_accuracy(self):
+        pass
 
 
 def _get_loader(trainset, testset=None, batch_size=32, num_workers=2, num_samples=1000, drop_last=True):

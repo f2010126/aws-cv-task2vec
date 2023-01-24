@@ -123,19 +123,24 @@ class Task2Vec:
                 if self.bernoulli:
                     target = torch.bernoulli(F.sigmoid(output)).detach()
                 else:
+                    # Sampling a y from the distribution. it's n-nary classification so sample a y
                     target = torch.multinomial(F.softmax(output, dim=-1), 1).detach().view(-1)
+
                 loss = self.loss_fn(output, target)
                 self.model.zero_grad()
                 loss.backward()
                 wandb.log({"loss_montecarlo_fisher": loss})
                 for p in self.model.parameters():
                     if p.grad is not None:
+                        # gradient is x-x_mean so square
                         p.grad2_acc += p.grad.data ** 2
                         p.grad_counter += 1
         for p in self.model.parameters():
+            # if  there's no update to gradient
             if p.grad_counter == 0:
                 del p.grad2_acc
             else:
+                # take avg of it.
                 p.grad2_acc /= p.grad_counter
         logging.info("done")
 
@@ -265,6 +270,7 @@ class Task2Vec:
         for hook in hooks:
             hook.remove()
         for index in indexes:
+            print(f'Index: {index} and length of list {len(self.model.layers[index].input_features)}  and shape {self.model.layers[index].input_features[0].shape}')
             self.model.layers[index].input_features = torch.cat(self.model.layers[index].input_features)
         self.model.layers[-1].targets = torch.cat(targets)
 

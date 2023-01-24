@@ -38,7 +38,7 @@ class BERT(ProbeNetwork):
             return x
         else:
             input_ids = kwargs['input_ids']
-            mask = kwargs['mask']
+            mask = kwargs['attention_mask']
             outputs = self.bert_model(input_ids=input_ids, attention_mask=mask)
             pooler_output = outputs['pooler_output']
             out = self.fc1(pooler_output)
@@ -169,20 +169,18 @@ class T2VBertArch(BertModel, ProbeNetwork):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-        self.layers = [
-            self.embeddings,
-            self.encoder,
-            self.pooler,
-            lambda z: torch.flatten(z, 1),
-            self.dropout,
-            self._classifier
-        ]
+        # after this, init the last layer and set up the layer list for the forward pass
 
     @property
     def classifier(self):
         return self._classifier
 
+    def replace_head(self, num_labels):
+        self._classifier = nn.Linear(self.config.hidden_size, num_labels)
+        self.post_init()
+    def set_layers(self):
+        self.layers = [layer for layer in self.encoder.layer]
+        self.layers.append(self._classifier)
     def forward(
             self,
             input_ids: Optional[torch.Tensor] = None,
