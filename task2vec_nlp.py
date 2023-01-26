@@ -28,7 +28,7 @@ from transformers import AdamW
 import wandb
 from utils import AverageMeter, get_error, get_device
 from pathlib import Path
-
+from transformers.models.bert.modeling_bert import BertLayer
 print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
 
 
@@ -57,12 +57,6 @@ class ProbeNetwork(ABC, nn.Module):
     def classifier(self, val):
         raise NotImplementedError("Override the classifier setter to set the submodules of the network that"
                                   " should be interpreted as the classifier")
-
-
-def _hook(layer, inputs):
-    if not hasattr(layer, 'input_features'):
-        layer.input_features = []
-    layer.input_features.append(inputs[0].data.cpu().clone())
 
 
 # In theory, it should work for all so.
@@ -94,6 +88,9 @@ class Task2VecNLP:
         self.loss_fn = self.loss_fn.to(self.device)
 
     def embed(self, dataset: Dataset):
+
+        from nlp.nlp_model import _bert_classifier_hook, _bert_encoder_hook
+
         # Cache the last layer features (needed to train the classifier) and (if needed) the intermediate layer features
         # so that we can skip the initial layers when computing the embedding
         if self.skip_layers > 0:
@@ -245,6 +242,18 @@ class Task2VecNLP:
             raise ValueError(f"Invalid Fisher method {self.method}")
         fisher_fn(dataset, **self.method_opts)
 
+    def _add_layer_hook(self, layer):
+        """
+        Add a hook according to the layer type. Encoder BertLayer hooks have multiple inputs,
+        nn.Module is the generic layer with a normal hook.
+        """
+        from nlp.nlp_model import _bert_classifier_hook, _bert_encoder_hook
+        if isinstance(layer, BertLayer):
+            return layer.register_forward_pre_hook(_bert_encoder_hook)
+        elif isinstance(layer,nn.Module):
+            return layer.register_forward_pre_hook(_bert_classifier_hook)
+        else:
+            return None
     def _cache_features(self, dataset: Dataset, indexes=(-1,), max_samples=None, loader_opts: dict = None):
         logging.info("Caching features...")
         if loader_opts is None:
@@ -253,9 +262,8 @@ class Task2VecNLP:
                                  num_workers=loader_opts.get('num_workers', 2), drop_last=False)
 
         device = next(self.model.parameters()).device
-
         # the -1 layer aka last layer and classifier has
-        hooks = [self.model.layers[index].register_forward_pre_hook(_hook)
+        hooks = [self._add_layer_hook(self.model.layers[index])
                  for index in indexes]
 
         if max_samples is not None:
@@ -283,7 +291,7 @@ class Task2VecNLP:
 
         for hook in hooks:
             hook.remove()
-
+        # Convert the data arrays into a tensor
         for index in indexes:
             self.model.layers[index].input_features = torch.cat(self.model.layers[index].input_features)  # add a
 

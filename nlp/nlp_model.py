@@ -13,6 +13,25 @@ from pathlib import Path
 print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
 logger = logging.get_logger(__name__)
 
+def _bert_classifier_hook(layer, inputs):
+    if not hasattr(layer, 'input_features'):
+        layer.input_features = []
+    layer.input_features.append(inputs[0].data.cpu().clone())
+
+#The input contains only the positional arguments
+def _bert_encoder_hook(layer, inputs):
+    if not hasattr(layer, 'input_features'):
+        # init a dict of empty arrays.
+        layer.input_features = {key: [] for key in range(len(inputs))}
+
+    # append to arrays
+    for i, item in enumerate(inputs):
+        # copy any tensor values
+        if isinstance(item, torch.Tensor):
+            layer.input_features[i].append(item.data.cpu().clone())
+        else:
+            layer.input_features[i].append(item)
+
 
 class BERT(ProbeNetwork):
     def __init__(self, classes):
