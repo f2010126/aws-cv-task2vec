@@ -19,7 +19,7 @@ def _bert_classifier_hook(layer, inputs):
     layer.input_features.append(inputs[0].data.cpu().clone())
 
 #The input contains only the positional arguments
-def _bert_encoder_hook(layer, inputs):
+def _bert_hook(layer, inputs):
     if not hasattr(layer, 'input_features'):
         # init a dict of empty arrays.
         layer.input_features = {key: [] for key in range(len(inputs))}
@@ -277,7 +277,7 @@ class T2VBertArch(BertModel, ProbeNetwork):
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
+        
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,

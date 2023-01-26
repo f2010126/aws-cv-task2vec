@@ -89,8 +89,6 @@ class Task2VecNLP:
 
     def embed(self, dataset: Dataset):
 
-        from nlp.nlp_model import _bert_classifier_hook, _bert_encoder_hook
-
         # Cache the last layer features (needed to train the classifier) and (if needed) the intermediate layer features
         # so that we can skip the initial layers when computing the embedding
         if self.skip_layers > 0:
@@ -102,7 +100,8 @@ class Task2VecNLP:
         self._fit_classifier(**self.classifier_opts)
 
         if self.skip_layers > 0:
-            dataset = torch.utils.data.TensorDataset(self.model.layers[self.skip_layers].input_features,
+            input_tuple=[item for item in self.model.layers[self.skip_layers].input_features.values() if isinstance(item[0], torch.Tensor) ]
+            dataset = torch.utils.data.TensorDataset(input_tuple[0], input_tuple[1],
                                                      self.model.layers[-1].targets)
         self.compute_fisher(dataset)
         embedding = self.extract_embedding(self.model)
@@ -111,7 +110,11 @@ class Task2VecNLP:
     def montecarlo_fisher(self, dataset: Dataset, epochs: int = 1):
         logging.info("Using montecarlo Fisher")
         if self.skip_layers > 0:
-            dataset = torch.utils.data.TensorDataset(self.model.layers[self.skip_layers].input_features,
+            input_tuple = [item for item in self.model.layers[self.skip_layers].input_features.values() if
+                           isinstance(item[0], torch.Tensor)]
+
+            # TODO: what if there's more than 2 tensors, ie label_id etc?
+            dataset = torch.utils.data.TensorDataset(input_tuple[0],input_tuple[1],
                                                      self.model.layers[-1].targets)
         data_loader = _get_loader(dataset, **self.loader_opts)
         device = get_device(self.model)
@@ -122,9 +125,9 @@ class Task2VecNLP:
             p.grad_counter = 0
         for k in range(epochs):
             logging.info(f"\tepoch {k + 1}/{epochs}")
-            for i, (data, target) in enumerate(tqdm(data_loader, leave=False, desc="Computing Fisher")):
+            for i, (sent_id, mask, target) in enumerate(tqdm(data_loader, leave=False, desc="Computing Fisher")):
                 data = data.to(device)
-                output = self.model(x=data, enable_fim=True)
+                output = self.model(input_ids=sent_id, attention_mask=mask, enable_fim=True)
                 # The gradients used to compute the FIM needs to be for y sampled from
                 # the model distribution y ~ p_w(y|x), not for y from the dataset
                 if self.bernoulli:
@@ -242,18 +245,15 @@ class Task2VecNLP:
             raise ValueError(f"Invalid Fisher method {self.method}")
         fisher_fn(dataset, **self.method_opts)
 
-    def _add_layer_hook(self, layer):
-        """
-        Add a hook according to the layer type. Encoder BertLayer hooks have multiple inputs,
-        nn.Module is the generic layer with a normal hook.
-        """
-        from nlp.nlp_model import _bert_classifier_hook, _bert_encoder_hook
-        if isinstance(layer, BertLayer):
-            return layer.register_forward_pre_hook(_bert_encoder_hook)
-        elif isinstance(layer,nn.Module):
-            return layer.register_forward_pre_hook(_bert_classifier_hook)
-        else:
-            return None
+    def _convert_features(self,layer):
+        if not hasattr(layer, 'input_features'):
+            raise ValueError("You need to cache some input features first ")
+        # convert each array in the dict to a torch
+        for key, item in layer.input_features.items():
+            # only transform if the item is a tensor
+            if isinstance(item[0], torch.Tensor):
+                layer.input_features[key] = torch.cat(item)
+
     def _cache_features(self, dataset: Dataset, indexes=(-1,), max_samples=None, loader_opts: dict = None):
         logging.info("Caching features...")
         if loader_opts is None:
@@ -262,8 +262,10 @@ class Task2VecNLP:
                                  num_workers=loader_opts.get('num_workers', 2), drop_last=False)
 
         device = next(self.model.parameters()).device
-        # the -1 layer aka last layer and classifier has
-        hooks = [self._add_layer_hook(self.model.layers[index])
+        # the -1 layer aka last layer classifier
+        # changing the input feature to dict to allow handling many inputs
+        from nlp.nlp_model import _bert_hook
+        hooks = [self.model.layers[index].register_forward_pre_hook(_bert_hook)
                  for index in indexes]
 
         if max_samples is not None:
@@ -293,7 +295,7 @@ class Task2VecNLP:
             hook.remove()
         # Convert the data arrays into a tensor
         for index in indexes:
-            self.model.layers[index].input_features = torch.cat(self.model.layers[index].input_features)  # add a
+            self._convert_features(self.model.layers[index])
 
         self.model.layers[-1].targets = torch.cat(targets)  # add a prop to the classifier
 
@@ -304,7 +306,8 @@ class Task2VecNLP:
         if not hasattr(self.model.classifier, 'input_features'):
             raise ValueError("You need to run `cache_features` on model before running `fit_classifier`")
         targets = self.model.classifier.targets.to(self.device)
-        features = self.model.classifier.input_features.to(self.device)
+        # since its classifier, only one input
+        features = self.model.classifier.input_features[0].to(self.device)
 
         dataset = torch.utils.data.TensorDataset(features, targets)
         data_loader = _get_loader(dataset, **self.loader_opts)
@@ -377,12 +380,8 @@ def _get_loader(trainset, testset=None, batch_size=32, num_workers=2, num_sample
     if getattr(trainset, 'is_multi_label', False):
         raise ValueError("Multi-label datasets not supported")
     # TODO: Find a way to standardize this
-    if hasattr(trainset, 'labels'):
-        labels = trainset.labels
-    elif hasattr(trainset, 'targets'):
-        labels = trainset.targets
-    else:
-        labels = list(trainset.tensors[1].cpu().numpy())
+    # find the labels and calculate the weights to ensure even distribution.
+    labels = list(trainset.tensors[-1].cpu().numpy())
     num_classes = int(getattr(trainset, 'num_classes', max(labels) + 1))
     class_count = np.eye(num_classes)[labels].sum(axis=0)
     weights = 1. / class_count[labels] / num_classes
