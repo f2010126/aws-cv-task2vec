@@ -19,6 +19,9 @@ def _bert_classifier_hook(layer, inputs):
     layer.input_features.append(inputs[0].data.cpu().clone())
 
 #The input contains only the positional arguments
+# for encoder, store all the inputs so when it goes through the loop, use that. See size.
+def _bert_encoder_hook(layer, inputs):
+    pass
 def _bert_hook(layer, inputs):
     if not hasattr(layer, 'input_features'):
         # init a dict of empty arrays.
@@ -123,7 +126,7 @@ class T2VBertEncoder(BertEncoder):
                     create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask,
-                    layer_head_mask,
+                    layer_head_mask,# not needed
                     encoder_hidden_states,
                     encoder_attention_mask,
                 )
@@ -131,11 +134,11 @@ class T2VBertEncoder(BertEncoder):
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask,
-                    layer_head_mask,
+                    layer_head_mask,# not needed
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
+                    past_key_value,# not needed
+                    output_attentions, # not needed
                 )
 
             hidden_states = layer_outputs[0]
@@ -197,6 +200,9 @@ class T2VBertArch(BertModel, ProbeNetwork):
     def replace_head(self, num_labels):
         self._classifier = nn.Linear(self.config.hidden_size, num_labels)
         self.post_init()
+
+    def store_input_size(self , input_ids):
+        self.input_shape = input_ids.size()
     def set_layers(self):
         self.layers = [layer for layer in self.encoder.layer]
         self.layers.append(self._classifier)
@@ -216,6 +222,7 @@ class T2VBertArch(BertModel, ProbeNetwork):
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
             start_from=0,
+            enable_fim=False,
             **kwargs
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
 
@@ -239,7 +246,17 @@ class T2VBertArch(BertModel, ProbeNetwork):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        batch_size, seq_length = input_shape
+        if enable_fim:
+            # TODO: if it's FIM, use the saved value of input_ids.size() and encoder_extended_attention_mask
+            batch_size, seq_length = self.input_shape
+            input_shape = self.input_shape
+            embedding_output = input_ids
+            extended_attention_mask = attention_mask
+            # Won't work if there' something needed. Store this as batches.
+            encoder_extended_attention_mask = self.encoder_extended_attention_mask
+        else:
+            batch_size, seq_length = input_shape
+
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # past_key_values_length
@@ -258,33 +275,40 @@ class T2VBertArch(BertModel, ProbeNetwork):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+        if not enable_fim:
+            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.config.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
+            if self.config.is_decoder and encoder_hidden_states is not None:
+                encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
+                encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
+                if encoder_attention_mask is None:
+                    encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+                encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+            else:
+                encoder_extended_attention_mask = None
+
+            # store the encoder_extended_attention_mask, then use later
+            self.encoder_extended_attention_mask = encoder_extended_attention_mask
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-        
-        embedding_output = self.embeddings(
-            input_ids=input_ids,
-            position_ids=position_ids,
-            token_type_ids=token_type_ids,
-            inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
-        )
+            head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+
+            embedding_output = self.embeddings(
+                input_ids=input_ids,
+                position_ids=position_ids,
+                token_type_ids=token_type_ids,
+                inputs_embeds=inputs_embeds,
+                past_key_values_length=past_key_values_length,
+                )
+
+
+        #######
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
