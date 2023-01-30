@@ -1,12 +1,11 @@
 import numpy as np
 import pandas as pd
 import re
-
+import wandb
+import random
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import confusion_matrix, accuracy_score
 from sklearn.feature_extraction.text import TfidfVectorizer
 from nltk.corpus import stopwords
-from sklearn.feature_extraction.text import CountVectorizer
 
 import torch
 import torch.nn as nn
@@ -82,7 +81,7 @@ def load_hf_data():
     data.dropna(inplace=True)
     data.info()
 
-    return data.head(2000)
+    return data.head(200)
 
 
 class DenseNetwork(nn.Module):
@@ -104,7 +103,7 @@ class DenseNetwork(nn.Module):
         return x
 
 
-def test(model, validation_loader, criterion=nn.CrossEntropyLoss()):
+def test(model, validation_loader, test_sampler, criterion=nn.CrossEntropyLoss()):
     test_true = 0
     test_total = len(test_sampler)
     test_loss = 0.0
@@ -115,18 +114,26 @@ def test(model, validation_loader, criterion=nn.CrossEntropyLoss()):
             outputs = model(data_)
 
             loss = criterion(outputs, target_).item()
+            # wandb.log({"test_loss": loss})
 
             _, pred = torch.max(outputs, dim=1)
 
             test_true += torch.sum(pred == target_).item()
             test_loss += loss
+
+    accuracy = round(test_true / test_total, 4)
     print(f"Validation finished: Accuracy = {round(100 * test_true / test_total, 2)}%, Loss = {test_loss}")
+    wandb.log({"test_accuracy": round(100 * test_true / test_total, 2)})
+    return 1-accuracy
 
 
-def train(model, train_loader):
+
+def train(model, train_loader, config):
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.RMSprop(model.parameters(), lr=1e-3)
-    EPOCHS = 10
+    optimizer = optim.RMSprop(model.parameters(), lr=config['lr'])
+    wandb.log({"lr": config['lr']})
+
+    EPOCHS = 1  # config['epochs']
     TRAIN_LOSSES = []
     TRAIN_ACCURACIES = []
 
@@ -146,6 +153,7 @@ def train(model, train_loader):
 
             # Computing loss & backward propagation
             loss = criterion(outputs, target_)
+            # wandb.log({"train_loss": loss})
             loss.backward()
 
             # Applying gradients
@@ -158,18 +166,20 @@ def train(model, train_loader):
 
             epoch_total += target_.size(0)
         TRAIN_LOSSES.append(epoch_loss)
+        wandb.log({"train_epoch_loss": epoch_loss})
+        wandb.log({"train_epoch_accuracy": 100 * epoch_true / epoch_total})
         TRAIN_ACCURACIES.append(100 * epoch_true / epoch_total)
 
     print(
         f"Epoch {epoch + 1}/{EPOCHS} finished: train_loss = {epoch_loss}, train_accuracy = {TRAIN_ACCURACIES[epoch - 1]}")
 
 
-def get_vectorised_data():
+def get_vectorised_data(max_features=512):
     data = load_hf_data()
     label_map = {value: count for count, value in enumerate(set(data['product_category']))}
     x = list(data['review_text'])
     y = list(data["product_category"])
-    vectorizer = Vectorizer("[^a-zA-Z0-9]", max_features=7000, stop_words="german")
+    vectorizer = Vectorizer("[^a-zA-Z0-9]", max_features=max_features, stop_words="german")
     vectorizer.build_vectorizer(x)
     vector_x = vectorizer.vectorizeTexts(x).toarray()
     n_feat = vector_x.shape[1]
@@ -182,20 +192,47 @@ def get_vectorised_data():
     return vector_x, y_en, n_feat, n_cls, label_map
 
 
-if __name__ == '__main__':
-    vectorized_x, y_encoded, n_features, n_classes, label_map = get_vectorised_data()
+def run_tf_idf(config):
+    job_type=f"bohb_{str(round(config['lr'],2))}_{config['batch']}_{config['epochs']}"
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="Baselines for Feature Extraction",
+        group="TF-IDF",
+        job_type=job_type,
+        config={
+            "model": 'tf-idf classifier',
+            "dataset": "amazon-multi",
+            "device": device,
+        }
+    )
+
+    vectorized_x, y_encoded, n_features, n_classes, label_map = get_vectorised_data(max_features=512)
+    wandb.log({"n_features": n_features})
 
     dataset = DeDataset(vectorized_x, y_encoded)
     train_indices, test_indices = train_test_split(list(range(0, len(dataset))), test_size=0.2, random_state=42)
     train_sampler = SubsetRandomSampler(train_indices)
     test_sampler = SubsetRandomSampler(test_indices)
 
-    BATCH_SIZE = 128
+    BATCH_SIZE = config['batch']
+    wandb.log({"batch": BATCH_SIZE})
     train_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE,
                                                sampler=train_sampler)
     validation_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE,
                                                     sampler=test_sampler)
 
     model = DenseNetwork(n_features=n_features, n_classes=n_classes).to(device)
-    train(model, train_loader)
-    test(model, validation_loader)
+
+    train(model, train_loader, config)
+    score = test(model, validation_loader, test_sampler=test_sampler)
+    wandb.finish()
+    return score
+
+
+if __name__ == '__main__':
+    torch.manual_seed(0)
+    random.seed(0)
+    np.random.seed(0)
+    g = torch.Generator()
+    g.manual_seed(0)
+    run_tf_idf(config=None)
