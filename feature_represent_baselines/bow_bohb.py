@@ -15,18 +15,13 @@ from smac.scenario.scenario import Scenario
 
 # local
 try:
-    from tf_idf import run_tf_idf
+    from bow import run_bow
 except ImportError:
-    from tf_idf import run_tf_idf
-
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
+    from bow import run_bow
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description='TF-IDF BOHB')
+    parser = argparse.ArgumentParser(description='BOW BOHB')
     parser.add_argument('--exp_seed', type=int,
                         help='Experiment Seed', default=9)
     args = parser.parse_args()
@@ -55,19 +50,6 @@ if __name__ == "__main__":
 
     })
 
-    smac = SMAC4MF(scenario=scenario, tae_runner=run_tf_idf, intensifier_kwargs= {"initial_budget": 1, "max_budget": 25})
+    smac = SMAC4MF(scenario=scenario, tae_runner=run_bow, intensifier_kwargs= {"initial_budget": 1, "max_budget": 25})
     best_found_config = smac.optimize()
     print(f"BEST-->{best_found_config}")
-
-
-
-
-
-
-
-
-
-
-
-
-

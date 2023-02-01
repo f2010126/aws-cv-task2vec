@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.dataset import random_split
-import matplotlib.pyplot as plt
+import wandb
 import re
 import pandas as pd
 import numpy as np
@@ -204,6 +204,7 @@ def train_epoch(model, optimizer, train_loader, criterion,scheduler, input_type=
 
         # Compute loss
         loss = criterion(output, target)
+        wandb.log({"train_loss": loss.item()})
 
         # Perform gradient descent, backwards pass
         loss.backward()
@@ -217,7 +218,6 @@ def train_epoch(model, optimizer, train_loader, criterion,scheduler, input_type=
         total += len(target)
         _, pred = torch.max(output, dim=1)
         epoch_true = epoch_true + torch.sum(pred == target).item()
-
 
     return total_loss / total, epoch_true / total
 
@@ -235,6 +235,7 @@ def validate_epoch(model, valid_loader, criterion, input_type='bow'):
 
             # Calculate how wrong the model is
             loss = criterion(output, target)
+            wandb.log({"valid_loss": loss.item()})
 
             # Record metrics
             total_loss += loss.item()
@@ -242,7 +243,20 @@ def validate_epoch(model, valid_loader, criterion, input_type='bow'):
 
     return total_loss / total
 
-def run_bow():
+def run_bow(config):
+    job_type = f"bohb_{str(round(config['lr'], 2))}_{config['batch']}_{config['epochs']}"
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="Baselines for Feature Extraction",
+        group="BOW",
+        job_type=job_type,
+        config={
+            "model": 'bow classifier',
+            "dataset": "amazon-multi",
+            "device": device,
+        }
+    )
+
     MAX_LEN = 128
     MAX_VOCAB = 512
     dataset = DeDataset(max_vocab=MAX_VOCAB, max_len=MAX_LEN)
@@ -250,7 +264,8 @@ def run_bow():
         dataset, valid_ratio=0.05, test_ratio=0.05)
     len(train_dataset), len(valid_dataset), len(test_dataset)
 
-    BATCH_SIZE = 128
+    BATCH_SIZE = config['batch']
+    wandb.log({"batch": BATCH_SIZE})
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, collate_fn=collate)
     valid_loader = DataLoader(valid_dataset, batch_size=BATCH_SIZE, collate_fn=collate)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, collate_fn=collate)
@@ -258,14 +273,16 @@ def run_bow():
     n_features, n_classes=dataset.get_feat_class()
     model = DenseNetwork(n_features=n_features, n_classes=n_classes).to(device)
 
-    LEARNING_RATE = 5e-4
+    LEARNING_RATE =config['lr']# 5e-4
+    wandb.log({"lr": LEARNING_RATE})
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=LEARNING_RATE,
     )
     scheduler = CosineAnnealingLR(optimizer, 1)
-    n_epochs = 10
+    n_epochs = config['epochs'] #10
+    wandb.log({"epochs": n_epochs})
 
     TRAIN_ACCURACIES = []
     train_losses, valid_losses = [], []
@@ -276,6 +293,7 @@ def run_bow():
         print(
             f'epoch #{n_epochs + 1:3d}\ttrain_loss: {train_loss:.2e}\tvalid_loss: {valid_loss:.2e}\n \ttrain_acc: {train_acc:.2e}\n',
         )
+        wandb.log({"train_acc": train_acc*100})
         train_losses.append(train_loss)
         TRAIN_ACCURACIES.append(train_acc)
         valid_losses.append(valid_loss)
@@ -297,10 +315,12 @@ def run_bow():
             y_true.extend(predictions)
             y_pred.extend(target)
 
-    print(classification_report(y_true, y_pred))
+    # print(classification_report(y_true, y_pred))
+    wandb.finish()
+    return 1-TRAIN_ACCURACIES[-1]
 
 
 
 
 if __name__ == '__main__':
-    run_bow()
+    run_bow(config=None)

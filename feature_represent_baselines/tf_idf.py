@@ -114,7 +114,7 @@ def test(model, validation_loader, test_sampler, criterion=nn.CrossEntropyLoss()
             outputs = model(data_)
 
             loss = criterion(outputs, target_).item()
-            # wandb.log({"test_loss": loss})
+            wandb.log({"test_loss": loss})
 
             _, pred = torch.max(outputs, dim=1)
 
@@ -132,7 +132,7 @@ def train(model, train_loader, config,optimizer,scheduler):
     criterion = nn.CrossEntropyLoss()
     wandb.log({"lr": config['lr']})
 
-    EPOCHS = 1  # config['epochs']
+    EPOCHS = config['epochs']
     TRAIN_LOSSES = []
     TRAIN_ACCURACIES = []
 
@@ -152,7 +152,7 @@ def train(model, train_loader, config,optimizer,scheduler):
 
             # Computing loss & backward propagation
             loss = criterion(outputs, target_)
-            # wandb.log({"train_loss": loss})
+            wandb.log({"train_loss": loss})
             loss.backward()
 
             # Applying gradients
