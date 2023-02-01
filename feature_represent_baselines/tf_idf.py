@@ -6,7 +6,7 @@ import random
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from nltk.corpus import stopwords
-
+from torch.optim.lr_scheduler import CosineAnnealingLR
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -128,9 +128,8 @@ def test(model, validation_loader, test_sampler, criterion=nn.CrossEntropyLoss()
 
 
 
-def train(model, train_loader, config):
+def train(model, train_loader, config,optimizer,scheduler):
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.RMSprop(model.parameters(), lr=config['lr'])
     wandb.log({"lr": config['lr']})
 
     EPOCHS = 1  # config['epochs']
@@ -158,6 +157,7 @@ def train(model, train_loader, config):
 
             # Applying gradients
             optimizer.step()
+            scheduler.step()
 
             epoch_loss += loss.item()
 
@@ -169,9 +169,10 @@ def train(model, train_loader, config):
         wandb.log({"train_epoch_loss": epoch_loss})
         wandb.log({"train_epoch_accuracy": 100 * epoch_true / epoch_total})
         TRAIN_ACCURACIES.append(100 * epoch_true / epoch_total)
-
+    accuracy = TRAIN_ACCURACIES[epoch - 1]
     print(
         f"Epoch {epoch + 1}/{EPOCHS} finished: train_loss = {epoch_loss}, train_accuracy = {TRAIN_ACCURACIES[epoch - 1]}")
+    return 1-accuracy
 
 
 def get_vectorised_data(max_features=512):
@@ -222,9 +223,10 @@ def run_tf_idf(config):
                                                     sampler=test_sampler)
 
     model = DenseNetwork(n_features=n_features, n_classes=n_classes).to(device)
-
-    train(model, train_loader, config)
-    score = test(model, validation_loader, test_sampler=test_sampler)
+    optimizer = optim.RMSprop(model.parameters(), lr=config['lr'])
+    scheduler = CosineAnnealingLR(optimizer, 1)
+    score = train(model, train_loader,config,optimizer=optimizer,scheduler=scheduler)
+    test(model, validation_loader, test_sampler=test_sampler)
     wandb.finish()
     return score
 

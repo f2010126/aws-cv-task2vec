@@ -190,7 +190,8 @@ class DenseNetwork(nn.Module):
 
 def train_epoch(model, optimizer, train_loader, criterion,scheduler, input_type='bow'):
     model.train()
-    total_loss, total = 0, 0
+    total_loss, total,epoch_true = 0, 0, 0
+
     for seq, bow, target, text in train_loader:
         if input_type == 'bow':
             inputs = torch.FloatTensor(bow).to(device)
@@ -214,8 +215,11 @@ def train_epoch(model, optimizer, train_loader, criterion,scheduler, input_type=
         # Record metrics
         total_loss += loss.item()
         total += len(target)
+        _, pred = torch.max(output, dim=1)
+        epoch_true = epoch_true + torch.sum(pred == target).item()
 
-    return total_loss / total
+
+    return total_loss / total, epoch_true / total
 
 
 def validate_epoch(model, valid_loader, criterion, input_type='bow'):
@@ -238,7 +242,7 @@ def validate_epoch(model, valid_loader, criterion, input_type='bow'):
 
     return total_loss / total
 
-def run_bow(config):
+def run_bow():
     MAX_LEN = 128
     MAX_VOCAB = 512
     dataset = DeDataset(max_vocab=MAX_VOCAB, max_len=MAX_LEN)
@@ -251,7 +255,6 @@ def run_bow(config):
     valid_loader = DataLoader(valid_dataset, batch_size=BATCH_SIZE, collate_fn=collate)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, collate_fn=collate)
 
-    print('number of training batches:', len(train_loader), '\n')
     n_features, n_classes=dataset.get_feat_class()
     model = DenseNetwork(n_features=n_features, n_classes=n_classes).to(device)
 
@@ -262,35 +265,20 @@ def run_bow(config):
         lr=LEARNING_RATE,
     )
     scheduler = CosineAnnealingLR(optimizer, 1)
-    n_epochs = 0
+    n_epochs = 10
+
+    TRAIN_ACCURACIES = []
     train_losses, valid_losses = [], []
-    while True:
-        train_loss = train_epoch(model, optimizer, train_loader,criterion=criterion, scheduler=scheduler, input_type='bow')
+    for epoch in range(n_epochs):
+        train_loss, train_acc = train_epoch(model, optimizer, train_loader,criterion=criterion, scheduler=scheduler, input_type='bow')
         valid_loss = validate_epoch(model, valid_loader, criterion=criterion, input_type='bow')
 
         print(
-            f'epoch #{n_epochs + 1:3d}\ttrain_loss: {train_loss:.2e}\tvalid_loss: {valid_loss:.2e}\n',
+            f'epoch #{n_epochs + 1:3d}\ttrain_loss: {train_loss:.2e}\tvalid_loss: {valid_loss:.2e}\n \ttrain_acc: {train_acc:.2e}\n',
         )
-
-        # Early stopping if the current valid_loss is greater than the last three valid losses
-        if len(valid_losses) > 2 and all(valid_loss >= loss for loss in valid_losses[-3:]):
-            print('Stopping early')
-            break
-
         train_losses.append(train_loss)
+        TRAIN_ACCURACIES.append(train_acc)
         valid_losses.append(valid_loss)
-
-        n_epochs += 1
-
-    epoch_ticks = range(1, n_epochs + 1)
-    plt.plot(epoch_ticks, train_losses)
-    plt.plot(epoch_ticks, valid_losses)
-    plt.legend(['Train Loss', 'Valid Loss'])
-    plt.title('Losses')
-    plt.xlabel('Epoch #')
-    plt.ylabel('Loss')
-    plt.xticks(epoch_ticks)
-    plt.show()
 
     model.eval()
     test_accuracy, n_examples = 0, 0
