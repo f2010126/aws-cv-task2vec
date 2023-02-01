@@ -40,6 +40,8 @@ Downsides:
 - All methods recived input of the similar size overall, ~ 1600 samples of 512 vectors
 
 ## Experiment  
+
+Note: Lemmalization (grouping inflected words together is not supported by the nltk Lemmatizer). For this experiment, The Hanover Tagger is used.
 For each text representation type, the features are generated and fed to the classifier to train for a maximum of 10 epochs. HPO was done with BOHB on the training accuracy metric varying:
 - LR
 - batch
