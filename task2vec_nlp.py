@@ -99,10 +99,10 @@ class Task2VecNLP:
         # Fits the last layer classifier using cached features
         self._fit_classifier(**self.classifier_opts)
 
+        # TODO: what if there's more than 2 tensors, ie label_id etc?
         if self.skip_layers > 0:
             input_tuple=[item for item in self.model.layers[self.skip_layers].input_features.values() if isinstance(item[0], torch.Tensor) ]
-            dataset = torch.utils.data.TensorDataset(input_tuple[0], input_tuple[1],
-                                                     self.model.layers[-1].targets)
+            dataset = torch.utils.data.TensorDataset(*input_tuple,self.model.layers[-1].targets)
         self.compute_fisher(dataset)
         embedding = self.extract_embedding(self.model)
         return embedding
@@ -114,7 +114,7 @@ class Task2VecNLP:
                            isinstance(item[0], torch.Tensor)]
 
             # TODO: what if there's more than 2 tensors, ie label_id etc?
-            dataset = torch.utils.data.TensorDataset(input_tuple[0],input_tuple[1],
+            dataset = torch.utils.data.TensorDataset(*input_tuple,
                                                      self.model.layers[-1].targets)
         data_loader = _get_loader(dataset, **self.loader_opts)
         device = get_device(self.model)

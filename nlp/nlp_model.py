@@ -20,8 +20,6 @@ def _bert_classifier_hook(layer, inputs):
 
 #The input contains only the positional arguments
 # for encoder, store all the inputs so when it goes through the loop, use that. See size.
-def _bert_encoder_hook(layer, inputs):
-    pass
 def _bert_hook(layer, inputs):
     if not hasattr(layer, 'input_features'):
         # init a dict of empty arrays.
@@ -43,15 +41,21 @@ class BERT(ProbeNetwork):
         self.fc1 = nn.Linear(768, 512)
         self.out = nn.Linear(512, classes)
 
-        # define the forward pass
-        self.layers = [self.bert_model, self.fc1, self.out]
-
     @property
     def classifier(self):
         return self.out
 
-    def forward(self, **kwargs):
-        calculate_fim = kwargs['enable_fim']
+    def replace_head(self, num_labels):
+        self.out = nn.Linear(512, num_labels)
+
+    def set_layers(self):
+        # define the forward pass
+        self.layers = [self.bert_model, self.fc1, self.out]
+
+    def store_input_size(self , input_ids):
+        self.input_shape = input_ids.size()
+    def forward(self, input_ids, attention_mask, enable_fim=False,**kwargs):
+        calculate_fim = enable_fim
         if calculate_fim:
             """Replaces the default forward so that we can forward features starting from any intermediate layer."""
             x = kwargs['x']
@@ -59,9 +63,7 @@ class BERT(ProbeNetwork):
             x = self.out(x)
             return x
         else:
-            input_ids = kwargs['input_ids']
-            mask = kwargs['attention_mask']
-            outputs = self.bert_model(input_ids=input_ids, attention_mask=mask)
+            outputs = self.bert_model(input_ids=input_ids, attention_mask=attention_mask)
             pooler_output = outputs['pooler_output']
             out = self.fc1(pooler_output)
             out = self.out(out)

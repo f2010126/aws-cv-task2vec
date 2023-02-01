@@ -3,9 +3,8 @@ import wandb
 import datetime
 from pathlib import Path
 import argparse
-
-
-
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 print('Running' if __name__ == '__main__' else 'Importing', Path(__file__).resolve())
 
 # Local
@@ -19,13 +18,14 @@ try:
     from models import get_model
 except ImportError:
     from task2vec_datasets_nlp import benchmark_data, tenKGNAD, sb_10k, amazon_reviews_multi, cardiffnlp
+    from .nlp.nlp_model import BERT,T2VBertArch
 
 
-def small_data(projectname="Task2VecVision", notes='',skip=6):
+def small_data(projectname="Task2VecVision", notes='', skip=6):
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # ('stl10', 'mnist', 'cifar10', 'cifar100', 'letters', 'kmnist')
-    dataset_names = ('mnist', 'cifar10', 'cifar100', 'letters', 'kmnist','stl10',)
+    dataset_names = ('mnist', 'cifar10', 'cifar100', 'letters', 'kmnist', 'stl10',)
     # Change `root` with the directory you want to use to download the datasets
     dataset_list = [task2vec_datasets.__dict__[name](root='./data')[0] for name in dataset_names]
 
@@ -50,11 +50,11 @@ def small_data(projectname="Task2VecVision", notes='',skip=6):
         project=projectname,
         notes=notes,
     )
-    task_similarity.plot_distance_matrix(embeddings, dataset_names,filename='./vision_sets.png')
+    task_similarity.plot_distance_matrix(embeddings, dataset_names, filename='./vision_sets.png')
     wandb.finish()
 
 
-def meta_nlp(projectname="T2VSanity", notes='',skip=1):
+def meta_nlp(projectname="T2VSanity", notes='', skip=0):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     embeddings = []
     project_name = projectname
@@ -65,26 +65,6 @@ def meta_nlp(projectname="T2VSanity", notes='',skip=1):
         project=project_name,
         notes=notes,
         group=group_name,
-        job_type='benchmark_nlp',
-        config={
-            "model": 'BERT',
-            "dataset": 'benchmark_nlp',
-            "device": device,
-        }
-    )
-    train_data, val_data, label_map, _ = benchmark_data(root='./')
-    probe_network = T2VBertArch.from_pretrained("bert-base-german-cased") #BERT(classes=len(label_map))
-    probe_network.replace_head(num_labels=len(label_map))
-    probe_network.set_layers()
-
-    embedding_eng = Task2VecNLP(probe_network, max_samples=1000, skip_layers=skip).embed(train_data)
-    wandb.finish()
-    embeddings.append(embedding_eng)
-
-    wandb.init(
-        # set the wandb project where this run will be logged
-        project=project_name,
-        group=group_name,
         job_type='tenKGNAD',
         config={
             "model": 'BERT',
@@ -93,7 +73,7 @@ def meta_nlp(projectname="T2VSanity", notes='',skip=1):
         }
     )
     train_data, val_data, label_map = tenKGNAD(root='./')
-    probe_network = T2VBertArch.from_pretrained("bert-base-german-cased") #BERT(classes=len(label_map))
+    probe_network = BERT(classes=len(label_map)) #T2VBertArch.from_pretrained("bert-base-german-cased")
     probe_network.replace_head(num_labels=len(label_map))
     probe_network.set_layers()
 
@@ -114,7 +94,7 @@ def meta_nlp(projectname="T2VSanity", notes='',skip=1):
         }
     )
     train_data, val_data, label_map = sb_10k()
-    probe_network = T2VBertArch.from_pretrained("bert-base-german-cased") #BERT(classes=len(label_map))
+    probe_network = BERT(classes=len(label_map)) #T2VBertArch.from_pretrained("bert-base-german-cased")
     probe_network.replace_head(num_labels=len(label_map))
     probe_network.set_layers()
 
@@ -135,7 +115,7 @@ def meta_nlp(projectname="T2VSanity", notes='',skip=1):
         }
     )
     train_data, val_data, label_map = amazon_reviews_multi()
-    probe_network = T2VBertArch.from_pretrained("bert-base-german-cased")#BERT(classes=len(label_map))
+    probe_network = BERT(classes=len(label_map)) #T2VBertArch.from_pretrained("bert-base-german-cased")
     probe_network.replace_head(num_labels=len(label_map))
     probe_network.set_layers()
 
@@ -155,7 +135,7 @@ def meta_nlp(projectname="T2VSanity", notes='',skip=1):
         }
     )
     train_data, val_data, label_map = cardiffnlp(root='./')
-    probe_network = T2VBertArch.from_pretrained("bert-base-german-cased") #BERT(classes=len(label_map))
+    probe_network = BERT(classes=len(label_map)) #T2VBertArch.from_pretrained("bert-base-german-cased")
     probe_network.replace_head(num_labels=len(label_map))
     probe_network.set_layers()
 
@@ -163,20 +143,20 @@ def meta_nlp(projectname="T2VSanity", notes='',skip=1):
     embeddings.append(embedding_cardiff)
 
     task_similarity.plot_distance_matrix(embeddings,
-                                         labels =('benchmark', '10kGNAD', 'sb_10k', 'amazon', 'cardiffnlp'),
-                                         filename='./5_texts_cross.png')
+                                         labels=('10kGNAD', 'sb_10k', 'amazon', 'cardiffnlp'),
+                                         filename='4_texts_cross.png')
     wandb.finish()
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='T2V app description')
     parser.add_argument('--exp_name', type=str,
-                        help='Experiment Name', default="Task2VecSanity")
+                        help='Experiment Name', default="Task2VecBERTModel")
     parser.add_argument('--exp_notes', type=str,
-                        help='Experiment Notes', default="Debugging Workflow")
+                        help='Experiment Notes', default="Baseline")
     parser.add_argument('--skip_layer', type=int,
                         help='Skip Layer of Model', default=1)
 
     args = parser.parse_args()
-    meta_nlp(projectname=args.exp_name, notes=args.exp_notes,skip=args.skip_layer)
-    #small_data(projectname=args.exp_name,notes=args.exp_notes, skip=args.skip_layer)
+    meta_nlp(projectname=args.exp_name, notes=args.exp_notes, skip=args.skip_layer)
+    # small_data(projectname=args.exp_name,notes=args.exp_notes, skip=args.skip_layer)
