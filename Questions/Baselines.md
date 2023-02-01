@@ -79,6 +79,12 @@ Only 50 runs were possible. No seed variation.
 
 
 
-![[tf_idf_bohb_loss.png]]
+![TF IDF BOHB Loss](tf_idf_bohb_loss.png)
 
-![[tf_idf_bohb_acc.png]]
+![TF IDF BOHB Acc](tf_idf_bohb_acc.png)
+
+## Thoughts
+- Bow, TF-IDF are easy to implement and take less time for feature extraction and training. 
+- Scaling is a problem. Experiments with 7000 feature sizes were far more accurate, ~91%
+- The vectors are dependent on the vocabulary and no benefit of pretraining. 
+- The context and meaning of the language is not preserved. 
