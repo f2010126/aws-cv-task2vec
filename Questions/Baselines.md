@@ -45,6 +45,7 @@ For each text representation type, the features are generated and fed to the cla
 - batch
 - epochs
 - optimiser
+
 Only 50 runs were possible. No seed variation. 
 
 ### Best config 
