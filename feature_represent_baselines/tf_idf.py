@@ -39,6 +39,7 @@ class Vectorizer():
         self.clean_pattern = clean_pattern
         self.max_features = max_features
         self.stopwords = stopwords.words('german')
+        self.stopwords.update(['.', ',', '"', "'", ':', ';', '(', ')', '[', ']', '{', '}'])
         self.tfidf = TfidfVectorizer(stop_words=self.stopwords, max_features=self.max_features)
         self.builded = False
 

@@ -77,6 +77,7 @@ class DeDataset(Dataset):
                      axis=1)
 
         german_stops = set(stopwords.words('german'))
+        german_stops.update(['.', ',', '"', "'", ':', ';', '(', ')', '[', ']', '{', '}'])
         df['tokens'] = df.review_text.apply(
             partial(
                 tokenize,
@@ -260,8 +261,8 @@ def run_bow(config, job_type=None):
         }
     )
 
-    MAX_LEN = 128
-    MAX_VOCAB = 512
+    MAX_LEN = 512
+    MAX_VOCAB = 10000
     dataset = DeDataset(max_vocab=MAX_VOCAB, max_len=MAX_LEN)
     train_dataset, valid_dataset, test_dataset = split_train_valid_test(
         dataset, valid_ratio=0.05, test_ratio=0.05)
