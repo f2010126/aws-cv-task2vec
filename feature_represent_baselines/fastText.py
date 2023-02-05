@@ -3,6 +3,7 @@ import random
 import numpy as np
 import pandas as pd
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from datasets import load_dataset
 from nltk.corpus import stopwords
@@ -172,7 +173,28 @@ def split_train_valid_test(corpus, valid_ratio=0.1, test_ratio=0.1):
         corpus, lengths=[train_length, valid_length, test_length],
     )
 
+class DenseNetwork(nn.Module):
 
+    def __init__(self, batch, embed_dim,vocab_len, n_classes):
+        super(DenseNetwork, self).__init__()
+        self.embed = nn.Embedding(num_embeddings=vocab_len, embedding_dim=embed_dim)
+        self.flat=nn.Flatten()
+        self.fc1 = nn.Linear(batch, 512)
+        self.drop1 = nn.Dropout(0.4)
+        self.fc2 = nn.Linear(512, 256)
+        self.drop2 = nn.Dropout(0.4)
+        self.prediction = nn.Linear(256, n_classes)
+
+    def forward(self, x):
+        x= x.to(torch.float)
+        x = self.embed(x)
+        x= self.flat(x)
+        x = F.relu(self.fc1(x))
+        x = self.drop1(x)
+        x = F.relu(self.fc2(x))
+        x = self.drop2(x)
+        x = F.log_softmax(self.prediction(x), dim=1)
+        return x
 # Main Runner
 def fasttext(config=None):
     MAX_LEN = 512
@@ -194,7 +216,7 @@ def fasttext(config=None):
     embed_dim = 300  # default size of embed from fast text
     weight_decay = 1e-4
 
-    # get word embeddings
+    # get word embeddings, embedding[word] returns the associated vector.
     embeddings = load_embeddings()
 
     print('preparing embedding matrix...')
@@ -213,6 +235,10 @@ def fasttext(config=None):
         else:
             words_not_found.append(word)
     print('number of null word embeddings: %d' % np.sum(np.sum(embedding_matrix, axis=1) == 0))
+
+    model = DenseNetwork(batch=batch_size,embed_dim=embed_dim,vocab_len=len(vocab),n_classes=dataset.n_class).to(device)
+
+
 
 
 if __name__ == '__main__':
