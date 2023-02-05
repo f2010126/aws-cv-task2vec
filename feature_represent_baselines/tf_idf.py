@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-
+from ConfigSpace import ConfigurationSpace, Configuration
 from torch.utils.data.sampler import SubsetRandomSampler
 from torch.utils.data import Dataset
 
@@ -193,8 +193,9 @@ def get_vectorised_data(max_features=512):
     return vector_x, y_en, n_feat, n_cls, label_map
 
 
-def run_tf_idf(config):
-    job_type=f"bohb_{str(round(config['lr'],2))}_{config['batch']}_{config['epochs']}"
+def run_tf_idf(config,job_type=None):
+    if job_type is None:
+        job_type=f"bohb_{str(round(config['lr'],2))}_{config['batch']}_{config['epochs']}"
     wandb.init(
         # set the wandb project where this run will be logged
         project="Baselines for Feature Extraction",
@@ -231,10 +232,22 @@ def run_tf_idf(config):
     return score
 
 
+def write_to_wand():
+    {
+        'batch': 128,
+        'epochs': 10,
+        'lr': 0.006876174282463883,
+    }
+
 if __name__ == '__main__':
     torch.manual_seed(0)
     random.seed(0)
     np.random.seed(0)
     g = torch.Generator()
     g.manual_seed(0)
-    run_tf_idf(config=None)
+
+    run_tf_idf(config={
+        'batch': 128,
+        'epochs': 10,
+        'lr': 0.006876174282463883,
+    }, job_type="best_tf-idf")

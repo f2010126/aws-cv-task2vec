@@ -1,6 +1,7 @@
 import argparse
 import torch
 import random
+import wandb
 
 from pathlib import Path
 import os
@@ -48,7 +49,7 @@ if __name__ == "__main__":
     # Provide meta data for the optimization
     scenario = Scenario({
         "run_obj": "quality",  # Optimize quality (alternatively runtime)
-        "runcount-limit": 25,  # Max number of function evaluations (the more the better)
+        "runcount-limit": 50,  # Max number of function evaluations (the more the better)
         "cs": configspace,
         "output_dir": "./smac_logs",
         "deterministic": True,
@@ -57,7 +58,14 @@ if __name__ == "__main__":
 
     smac = SMAC4MF(scenario=scenario, tae_runner=run_tf_idf, intensifier_kwargs= {"initial_budget": 1, "max_budget": 25})
     best_found_config = smac.optimize()
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="Baselines for Feature Extraction",
+        group="TF-IDF",
+    )
     print(f"BEST-->{best_found_config}")
+    wandb.log({"best_config": best_found_config})
+    wandb.finish()
 
 
 

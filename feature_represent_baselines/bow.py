@@ -243,8 +243,11 @@ def validate_epoch(model, valid_loader, criterion, input_type='bow'):
 
     return total_loss / total
 
-def run_bow(config):
-    job_type = f"bohb_{str(round(config['lr'], 2))}_{config['batch']}_{config['epochs']}"
+def run_bow(config, job_type=None):
+
+    if job_type is None:
+        job_type=f"bohb_{str(round(config['lr'],2))}_{config['batch']}_{config['epochs']}"
+
     wandb.init(
         # set the wandb project where this run will be logged
         project="Baselines for Feature Extraction",
@@ -320,7 +323,17 @@ def run_bow(config):
     return 1-TRAIN_ACCURACIES[-1]
 
 
+def write_to_wand():
+    best_config={
+  'batch': 32,
+  'epochs': 10,
+  'lr': 0.004939121389077578,
+}
 
 
 if __name__ == '__main__':
-    run_bow(config=None)
+
+    run_bow(config={
+  'batch': 32,
+  'epochs': 10,
+  'lr': 0.004939121389077578,}, job_type='Best bow')
