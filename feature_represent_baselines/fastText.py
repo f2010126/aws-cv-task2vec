@@ -14,13 +14,30 @@ import re
 from torch.utils.data.dataset import random_split
 from tqdm import tqdm
 import codecs
+from sklearn.metrics import classification_report
 import fasttext.util
+import itertools
 from HanTa import HanoverTagger as ht
+from torch import optim
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 tagger = ht.HanoverTagger('morphmodel_ger.pgz')
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
+def load_embeddings():
+    print('loading word embeddings...')
+    embeddings_index = {}
+    f = codecs.open('wiki.de.vec', encoding='utf-8')
+    for line in tqdm(f):
+        values = line.rstrip().rsplit(' ')
+        word = values[0]
+        coefs = np.asarray(values[1:], dtype='float32')
+        embeddings_index[word] = coefs
+    f.close()
+    print('found %s word vectors' % len(embeddings_index))
+    return embeddings_index
+# get word embeddings, embedding[word] returns the associated vector.
+embeddings = load_embeddings()
 
 def de_lemma_noun(text):
     # see dlcumentation of teh tagger. its working on words assuming sentences
@@ -56,20 +73,9 @@ def remove_unknown(tokens):
     return [token for token in tokens if token != '<UNK>']
 
 
-def load_embeddings():
-    print('loading word embeddings...')
-    embeddings_index = {}
-    f = codecs.open('wiki.de.vec', encoding='utf-8')
-    for line in tqdm(f):
-        values = line.rstrip().rsplit(' ')
-        word = values[0]
-        coefs = np.asarray(values[1:], dtype='float32')
-        embeddings_index[word] = coefs
-    f.close()
-    print('found %s word vectors' % len(embeddings_index))
-    return embeddings_index
-
-
+def pad_to_longest(lists):
+    pad_token=0
+    return list(zip(*itertools.zip_longest(*lists, fillvalue=pad_token)))
 class DeDataset(Dataset):
     def __init__(self, max_vocab=5000, max_len=128):
         dataset_train = load_dataset("amazon_reviews_multi", 'de', split='train')
@@ -135,7 +141,8 @@ class DeDataset(Dataset):
         )
 
         self.text = df.review_text.tolist()
-        self.sequences = df.indexed_tokens.tolist()
+        # needs to be padded
+        self.sequences = pad_to_longest(df.indexed_tokens.tolist())
         self.targets = df.target.tolist()
 
     def __getitem__(self, i):
@@ -179,14 +186,17 @@ class DenseNetwork(nn.Module):
         super(DenseNetwork, self).__init__()
         self.embed = nn.Embedding(num_embeddings=vocab_len, embedding_dim=embed_dim)
         self.flat=nn.Flatten()
-        self.fc1 = nn.Linear(batch, 512)
+        self.fc1 = nn.Linear(53700,512)
         self.drop1 = nn.Dropout(0.4)
         self.fc2 = nn.Linear(512, 256)
         self.drop2 = nn.Dropout(0.4)
         self.prediction = nn.Linear(256, n_classes)
 
+    def set_embedding_weights(self, embed_w):
+        self.embed.weight.data.copy_(embed_w)
+
     def forward(self, x):
-        x= x.to(torch.float)
+        x= x.to(torch.long)
         x = self.embed(x)
         x= self.flat(x)
         x = F.relu(self.fc1(x))
@@ -205,7 +215,6 @@ def fasttext(config=None):
 
     # training params
     batch_size = 256
-    num_epochs = 8
     BATCH_SIZE = 256  # config['batch']
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, collate_fn=collate)
@@ -215,9 +224,6 @@ def fasttext(config=None):
     # model parameters
     embed_dim = 300  # default size of embed from fast text
     weight_decay = 1e-4
-
-    # get word embeddings, embedding[word] returns the associated vector.
-    embeddings = load_embeddings()
 
     print('preparing embedding matrix...')
     words_not_found = []
@@ -236,9 +242,101 @@ def fasttext(config=None):
             words_not_found.append(word)
     print('number of null word embeddings: %d' % np.sum(np.sum(embedding_matrix, axis=1) == 0))
 
-    model = DenseNetwork(batch=batch_size,embed_dim=embed_dim,vocab_len=len(vocab),n_classes=dataset.n_class).to(device)
+    model = DenseNetwork(batch=batch_size,embed_dim=embed_dim,vocab_len=len(vocab),n_classes=dataset.n_class)
+    model.set_embedding_weights(torch.FloatTensor(embedding_matrix))
+    model=model.to(device)
+
+    learning_rate = 0.001#config['lr']
+    criterion = nn.CrossEntropyLoss()
+
+    optimizer = optim.Adam(
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=learning_rate,
+    )
+
+    scheduler = CosineAnnealingLR(optimizer, 1)
+    n_epochs = 10 #config['epochs']
+
+    TRAIN_ACCURACIES = []
+    train_losses, valid_losses = [], []
+    for epoch in range(n_epochs):
+        train_loss, train_acc = train_epoch(model, optimizer, train_loader,criterion=criterion, scheduler=scheduler)
+        valid_loss = validate_epoch(model, valid_loader, criterion=criterion)
+
+        print(
+            f'epoch #{n_epochs + 1:3d}\ttrain_loss: {train_loss:.2e}\tvalid_loss: {valid_loss:.2e}\n \ttrain_acc: {train_acc:.2e}\n',
+        )
+        train_losses.append(train_loss)
+        TRAIN_ACCURACIES.append(train_acc)
+        valid_losses.append(valid_loss)
+
+    model.eval()
+    test_accuracy, n_examples = 0, 0
+    y_true, y_pred = [], []
+
+    with torch.no_grad():
+        for seq,target, text in test_loader:
+            inputs = torch.FloatTensor(seq).to(device)
+            probs = model(inputs)
+
+            probs = probs.detach().cpu().numpy()
+            predictions = np.argmax(probs, axis=1)
+            target = target.cpu().numpy()
+
+            y_true.extend(predictions)
+            y_pred.extend(target)
+
+    print(classification_report(y_true, y_pred))
 
 
+def train_epoch(model, optimizer, train_loader, criterion,scheduler):
+    model.train()
+    total_loss, total,epoch_true = 0, 0, 0
+
+    for seq, target, text in train_loader:
+        inputs = torch.FloatTensor(seq).to(device)
+
+        # Reset gradient
+        optimizer.zero_grad()
+
+        # Forward pass
+        output = model(inputs)
+
+        # Compute loss
+        loss = criterion(output, target)
+
+        # Perform gradient descent, backwards pass
+        loss.backward()
+
+        # Take a step in the right direction
+        optimizer.step()
+        scheduler.step()
+
+        # Record metrics
+        total_loss += loss.item()
+        total += len(target)
+        _, pred = torch.max(output, dim=1)
+        epoch_true = epoch_true + torch.sum(pred == target).item()
+
+    return total_loss / total, epoch_true / total
+
+def validate_epoch(model, valid_loader, criterion):
+    model.eval()
+    total_loss, total = 0, 0
+    with torch.no_grad():
+        for seq, target, text in valid_loader:
+           inputs = torch.LongTensor(seq).to(device)
+           #Forward pass
+           output = model(inputs)
+
+           # Calculate how wrong the model is
+           loss = criterion(output, target)
+
+            # Record metrics
+           total_loss += loss.item()
+        total += len(target)
+
+    return total_loss / total
 
 
 if __name__ == '__main__':
