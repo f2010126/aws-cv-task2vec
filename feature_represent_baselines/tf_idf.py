@@ -18,6 +18,7 @@ from torch.utils.data import Dataset
 # HF
 from datasets import load_dataset
 from transformers import AdamW
+
 # local
 try:
     from utils import random_string
@@ -130,11 +131,10 @@ def test(model, validation_loader, test_sampler, criterion=nn.CrossEntropyLoss()
     accuracy = round(test_true / test_total, 4)
     print(f"Validation finished: Accuracy = {round(100 * test_true / test_total, 2)}%, Loss = {test_loss}")
     wandb.log({"test_accuracy": round(100 * test_true / test_total, 2)})
-    return 1-accuracy
+    return 1 - accuracy
 
 
-
-def train(model, train_loader, config,optimizer,scheduler):
+def train(model, train_loader, config, optimizer, scheduler):
     criterion = nn.CrossEntropyLoss()
     wandb.log({"lr": config['lr']})
 
@@ -178,7 +178,7 @@ def train(model, train_loader, config,optimizer,scheduler):
     accuracy = TRAIN_ACCURACIES[epoch - 1]
     print(
         f"Epoch {epoch + 1}/{EPOCHS} finished: train_loss = {epoch_loss}, train_accuracy = {TRAIN_ACCURACIES[epoch - 1]}")
-    return 1-accuracy
+    return 1 - accuracy
 
 
 def get_vectorised_data(max_features=512):
@@ -199,9 +199,10 @@ def get_vectorised_data(max_features=512):
     return vector_x, y_en, n_feat, n_cls, label_map
 
 
-def run_tf_idf(config,job_type=None):
+def run_tf_idf(config, job_type=None):
     if job_type is None:
-        job_type=f"bohb_{str(round(config['lr'],2))}_{config['batch']}_{random_string(5)}"
+        job_type = f"bohb_{str(round(config['lr'], 2))}_{config['batch']}_{random_string(5)}"
+
     wandb.init(
         # set the wandb project where this run will be logged
         project="Baselines for Feature Extraction",
@@ -221,7 +222,6 @@ def run_tf_idf(config,job_type=None):
     train_indices, test_indices = train_test_split(list(range(0, len(dataset))), test_size=0.2, random_state=42)
     train_sampler = SubsetRandomSampler(train_indices)
     test_sampler = SubsetRandomSampler(test_indices)
-
 
     LEARNING_RATE = config['lr']  # 5e-4
     weight_decay = config['weight_decay']
@@ -253,9 +253,9 @@ def run_tf_idf(config,job_type=None):
                           lr=LEARNING_RATE, weight_decay=weight_decay)
     else:
         print(f"Unsuported optimizer {opt_type}")
-    #TODO: vary the scheduler for BOHB
+    # TODO: vary the scheduler for BOHB
     scheduler = CosineAnnealingLR(optimizer, 1)
-    score = train(model, train_loader,config,optimizer=optimizer,scheduler=scheduler)
+    score = train(model, train_loader, config, optimizer=optimizer, scheduler=scheduler)
     test(model, validation_loader, test_sampler=test_sampler)
     wandb.finish()
     return score
@@ -268,6 +268,7 @@ def write_to_wand():
         'lr': 0.006876174282463883,
     }
 
+
 if __name__ == '__main__':
     torch.manual_seed(0)
     random.seed(0)
@@ -276,10 +277,9 @@ if __name__ == '__main__':
     g.manual_seed(0)
 
     run_tf_idf(config={
-        'batch': 32,
+        'batch': 64,
         'epochs': 10,
-        'lr': 0.004939121389077578,
-        'weight_decay': 1e-4,
-        'optimizer': 'adam'},
+        'lr': 0.009672407004688972,
+        'optimizer': 'adamW',
+        'weight_decay': 0.003052454777425161, },
         job_type="best_tf-idf")
-

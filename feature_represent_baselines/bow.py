@@ -18,6 +18,7 @@ from functools import partial
 from collections import Counter
 from transformers import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
+
 # local
 try:
     from utils import random_string
@@ -260,10 +261,10 @@ def run_bow(config, job_type=None):
         group="BOW",
         job_type=job_type,
         config={
-            "model": 'bow classifier',
+            "model": 'bow embed classifier',
             "dataset": "amazon-multi",
             "device": device,
-        }
+        },
     )
 
     MAX_LEN = 512
@@ -357,10 +358,10 @@ def write_to_wand():
 
 if __name__ == '__main__':
     run_bow(config={
-        'batch': 32,
+        'batch': 64,
         'epochs': 10,
-        'lr': 0.004939121389077578,
-        'weight_decay': 1e-4,
-        'optimizer': 'adam',
-        'vocab': 10000},
+        'lr': 0.008094972482995578,
+        'optimizer': 'adamW',
+        'vocab': 4096,
+        'weight_decay': 1.3926095972652506e-05, },
         job_type='Best bow')

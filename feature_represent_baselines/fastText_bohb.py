@@ -12,11 +12,11 @@ from smac.scenario.scenario import Scenario
 
 # local
 try:
-    from fastText import fasttext_run
+    from fastText import fasttext_run, load_embeddings
 except ImportError:
-    from fastText import fasttext_run
+    from fastText import fasttext_run, load_embeddings
 
-
+embeddings = load_embeddings()
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='BOW BOHB')
     parser.add_argument('--exp_seed', type=int,
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     best_found_config = smac.optimize()
     wandb.init(
         # set the wandb project where this run will be logged
-        project="Baselines for Feature Extraction1",
+        project="Baselines for Feature Extraction",
         group="FastText",
     )
     print(f"BEST-->{best_found_config}")

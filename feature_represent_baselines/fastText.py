@@ -23,27 +23,17 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 # local
 try:
-    from utils import random_string
+    from utils import random_string, load_embeddings
 except ImportError:
-    from utils import random_string
+    from utils import random_string, load_embeddings
 
 tagger = ht.HanoverTagger('morphmodel_ger.pgz')
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-def load_embeddings():
-    print('loading word embeddings...')
-    embeddings_index = {}
-    f = codecs.open('wiki.de.vec', encoding='utf-8')
-    for line in tqdm(f):
-        values = line.rstrip().rsplit(' ')
-        word = values[0]
-        coefs = np.asarray(values[1:], dtype='float32')
-        embeddings_index[word] = coefs
-    f.close()
-    print('found %s word vectors' % len(embeddings_index))
-    return embeddings_index
+
 # get word embeddings, embedding[word] returns the associated vector.
 embeddings = load_embeddings()
+
 
 def de_lemma_noun(text):
     # see dlcumentation of teh tagger. its working on words assuming sentences
@@ -80,8 +70,9 @@ def remove_unknown(tokens):
 
 
 def pad_to_longest(lists):
-    pad_token=0
+    pad_token = 0
     return list(zip(*itertools.zip_longest(*lists, fillvalue=pad_token)))
+
 
 class DeDataset(Dataset):
     def __init__(self, max_vocab=5000, max_len=128):
@@ -187,13 +178,14 @@ def split_train_valid_test(corpus, valid_ratio=0.1, test_ratio=0.1):
         corpus, lengths=[train_length, valid_length, test_length],
     )
 
+
 class DenseNetwork(nn.Module):
 
-    def __init__(self, batch, embed_dim,vocab_len, n_classes):
+    def __init__(self, batch, embed_dim, vocab_len, n_classes):
         super(DenseNetwork, self).__init__()
         self.embed = nn.Embedding(num_embeddings=vocab_len, embedding_dim=embed_dim)
-        self.flat=nn.Flatten()
-        self.fc1 = nn.Linear(53700,512)
+        self.flat = nn.Flatten()
+        self.fc1 = nn.Linear(53700, 512)
         self.drop1 = nn.Dropout(0.4)
         self.fc2 = nn.Linear(512, 256)
         self.drop2 = nn.Dropout(0.4)
@@ -203,15 +195,17 @@ class DenseNetwork(nn.Module):
         self.embed.weight.data.copy_(embed_w)
 
     def forward(self, x):
-        x= x.to(torch.long)
+        x = x.to(torch.long)
         x = self.embed(x)
-        x= self.flat(x)
+        x = self.flat(x)
         x = F.relu(self.fc1(x))
         x = self.drop1(x)
         x = F.relu(self.fc2(x))
         x = self.drop2(x)
         x = F.log_softmax(self.prediction(x), dim=1)
         return x
+
+
 # Main Runner
 def fasttext_run(config, job_type=None):
     if job_type is None:
@@ -219,7 +213,7 @@ def fasttext_run(config, job_type=None):
 
     wandb.init(
         # set the wandb project where this run will be logged
-        project="Baselines for Feature Extraction1",
+        project="Baselines for Feature Extraction",
         group="FastText",
         job_type=job_type,
         config={
@@ -231,7 +225,7 @@ def fasttext_run(config, job_type=None):
 
     MAX_LEN = 512
     # training params
-    MAX_VOCAB = config['vocab']  # 10000
+    MAX_VOCAB = 10000
     LEARNING_RATE = config['lr']  # 5e-4
     weight_decay = config['weight_decay']
     opt_type = config['optimizer']
@@ -259,7 +253,7 @@ def fasttext_run(config, job_type=None):
     words_not_found = []
     # Embedding matrix is of size vocab(from the train set) length
     vocab = dataset.get_vocab()
-    wandb.log({"vocab_len":len(vocab)})
+    wandb.log({"vocab_len": len(vocab)})
     nb_words = min(MAX_VOCAB, len(vocab))
     embedding_matrix = np.zeros((len(vocab), embed_dim))
     for i, word in enumerate(vocab):
@@ -273,9 +267,9 @@ def fasttext_run(config, job_type=None):
             words_not_found.append(word)
     print('number of null word embeddings: %d' % np.sum(np.sum(embedding_matrix, axis=1) == 0))
 
-    model = DenseNetwork(batch=BATCH_SIZE,embed_dim=embed_dim,vocab_len=len(vocab),n_classes=dataset.n_class)
+    model = DenseNetwork(batch=BATCH_SIZE, embed_dim=embed_dim, vocab_len=len(vocab), n_classes=dataset.n_class)
     model.set_embedding_weights(torch.FloatTensor(embedding_matrix))
-    model=model.to(device)
+    model = model.to(device)
 
     criterion = nn.CrossEntropyLoss()
 
@@ -297,7 +291,7 @@ def fasttext_run(config, job_type=None):
     TRAIN_ACCURACIES = []
     train_losses, valid_losses = [], []
     for epoch in range(n_epochs):
-        train_loss, train_acc = train_epoch(model, optimizer, train_loader,criterion=criterion, scheduler=scheduler)
+        train_loss, train_acc = train_epoch(model, optimizer, train_loader, criterion=criterion, scheduler=scheduler)
         valid_loss = validate_epoch(model, valid_loader, criterion=criterion)
 
         print(
@@ -313,7 +307,7 @@ def fasttext_run(config, job_type=None):
     y_true, y_pred = [], []
 
     with torch.no_grad():
-        for seq,target, text in test_loader:
+        for seq, target, text in test_loader:
             inputs = torch.FloatTensor(seq).to(device)
             probs = model(inputs)
 
@@ -329,9 +323,9 @@ def fasttext_run(config, job_type=None):
     return 1 - TRAIN_ACCURACIES[-1]
 
 
-def train_epoch(model, optimizer, train_loader, criterion,scheduler):
+def train_epoch(model, optimizer, train_loader, criterion, scheduler):
     model.train()
-    total_loss, total,epoch_true = 0, 0, 0
+    total_loss, total, epoch_true = 0, 0, 0
 
     for seq, target, text in train_loader:
         inputs = torch.FloatTensor(seq).to(device)
@@ -361,21 +355,22 @@ def train_epoch(model, optimizer, train_loader, criterion,scheduler):
 
     return total_loss / total, epoch_true / total
 
+
 def validate_epoch(model, valid_loader, criterion):
     model.eval()
     total_loss, total = 0, 0
     with torch.no_grad():
         for seq, target, text in valid_loader:
-           inputs = torch.LongTensor(seq).to(device)
-           #Forward pass
-           output = model(inputs)
+            inputs = torch.LongTensor(seq).to(device)
+            # Forward pass
+            output = model(inputs)
 
-           # Calculate how wrong the model is
-           loss = criterion(output, target)
-           wandb.log({"valid_loss": loss.item()})
+            # Calculate how wrong the model is
+            loss = criterion(output, target)
+            wandb.log({"valid_loss": loss.item()})
 
             # Record metrics
-           total_loss += loss.item()
+            total_loss += loss.item()
         total += len(target)
 
     return total_loss / total
@@ -387,12 +382,12 @@ if __name__ == '__main__':
     np.random.seed(0)
     g = torch.Generator()
     g.manual_seed(0)
-    #TODO: log config
+    # TODO: log config
     fasttext_run(config={
-        'batch': 32,
-        'epochs': 1,
-        'lr': 0.004939121389077578,
-        'weight_decay': 1e-4,
+        'batch': 128,
+        'epochs': 10,
+        'lr': 0.003551330220098191,
         'optimizer': 'adam',
-        'vocab': 10000},
+        'vocab': 512,
+        'weight_decay': 2.0262379281318497e-05, },
         job_type='fasttext')
