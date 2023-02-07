@@ -208,13 +208,13 @@ class DenseNetwork(nn.Module):
 # Main Runner
 def fasttext(config=None):
     MAX_LEN = 512
-    MAX_VOCAB = 10000
+    MAX_VOCAB = 10000 # config['max_vocab']
     dataset = DeDataset(max_vocab=MAX_VOCAB, max_len=MAX_LEN)
     train_dataset, valid_dataset, test_dataset = split_train_valid_test(
         dataset, valid_ratio=0.05, test_ratio=0.05)
 
     # training params
-    batch_size = 256
+    batch_size = 256   # config['batch']
     BATCH_SIZE = 256  # config['batch']
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, collate_fn=collate)
@@ -223,12 +223,14 @@ def fasttext(config=None):
 
     # model parameters
     embed_dim = 300  # default size of embed from fast text
-    weight_decay = 1e-4
+    #TODO: Vary this to get the best result
+    weight_decay = 1e-4    # config['weight_decay']
 
     print('preparing embedding matrix...')
     words_not_found = []
     # Embedding matrix is of size vocab(from the train set) length
     vocab = dataset.get_vocab()
+    # TODO: Log len of vocab since embedding matrix is of size vocab length
     nb_words = min(MAX_VOCAB, len(vocab))
     embedding_matrix = np.zeros((len(vocab), embed_dim))
     for i, word in enumerate(vocab):
@@ -248,7 +250,7 @@ def fasttext(config=None):
 
     learning_rate = 0.001#config['lr']
     criterion = nn.CrossEntropyLoss()
-
+  #TODO: Vary this to get the best result
     optimizer = optim.Adam(
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=learning_rate,
@@ -345,5 +347,5 @@ if __name__ == '__main__':
     np.random.seed(0)
     g = torch.Generator()
     g.manual_seed(0)
-
+    #TODO: log config
     fasttext()

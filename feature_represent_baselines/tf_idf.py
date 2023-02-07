@@ -82,7 +82,7 @@ def load_hf_data():
     data.dropna(inplace=True)
     data.info()
 
-    return data.head(200)
+    return data.head(2000)
 
 
 class DenseNetwork(nn.Module):
@@ -225,7 +225,9 @@ def run_tf_idf(config,job_type=None):
                                                     sampler=test_sampler)
 
     model = DenseNetwork(n_features=n_features, n_classes=n_classes).to(device)
+    #TODO: vary the optimiser for BOHB
     optimizer = optim.RMSprop(model.parameters(), lr=config['lr'])
+    #TODO: vary the scheduler for BOHB
     scheduler = CosineAnnealingLR(optimizer, 1)
     score = train(model, train_loader,config,optimizer=optimizer,scheduler=scheduler)
     test(model, validation_loader, test_sampler=test_sampler)

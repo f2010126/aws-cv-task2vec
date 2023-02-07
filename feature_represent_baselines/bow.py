@@ -262,7 +262,7 @@ def run_bow(config, job_type=None):
     )
 
     MAX_LEN = 512
-    MAX_VOCAB = 10000
+    MAX_VOCAB = 10000 #TODO: Vary this to see how it impacts performance
     dataset = DeDataset(max_vocab=MAX_VOCAB, max_len=MAX_LEN)
     train_dataset, valid_dataset, test_dataset = split_train_valid_test(
         dataset, valid_ratio=0.05, test_ratio=0.05)
@@ -280,10 +280,12 @@ def run_bow(config, job_type=None):
     LEARNING_RATE =config['lr']# 5e-4
     wandb.log({"lr": LEARNING_RATE})
     criterion = nn.CrossEntropyLoss()
+    #TODO: change the optimisers to see how it impacts performance
     optimizer = optim.Adam(
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=LEARNING_RATE,
     )
+    #TODO: add variation of scheduler to see how it impacts performance
     scheduler = CosineAnnealingLR(optimizer, 1)
     n_epochs = config['epochs'] #10
     wandb.log({"epochs": n_epochs})
