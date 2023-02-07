@@ -41,10 +41,12 @@ if __name__ == "__main__":
     # Define your hyperparameters
 
     lr = UniformFloatHyperparameter('lr', lower=1e-5, upper= 1e-2, default_value=1e-3, log=True)
-    # feature_size = CategoricalHyperparameter('feature_size', choices=[1024, 512, 7000, 256],default_value=512)
+    weight_decay = UniformFloatHyperparameter('weight_decay', lower=1e-5, upper=1e-2, default_value=1e-4, log=True)
+    optimizer_type = CategoricalHyperparameter('optimizer', choices=['adam', 'sgd', 'adamW'],
+                                               default_value='adam')
     batch = CategoricalHyperparameter('batch', choices=[32, 512, 64, 128, 256], default_value=32)
     epochs = UniformIntegerHyperparameter('epochs', lower=3,upper=10, default_value=10)
-    configspace.add_hyperparameters([lr, batch, epochs])
+    configspace.add_hyperparameters([lr, batch, epochs, optimizer_type, weight_decay])
 
     # Provide meta data for the optimization
     scenario = Scenario({
@@ -64,7 +66,7 @@ if __name__ == "__main__":
         group="TF-IDF",
     )
     print(f"BEST-->{best_found_config}")
-    wandb.log({"best_config": best_found_config})
+    wandb.log({"best_config_tfidf": best_found_config.get_dictionary()})
     wandb.finish()
 
 

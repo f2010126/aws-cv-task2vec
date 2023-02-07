@@ -12,9 +12,10 @@ from smac.scenario.scenario import Scenario
 
 # local
 try:
-    from bow import run_bow
+    from fastText import fasttext_run
 except ImportError:
-    from bow import run_bow
+    from fastText import fasttext_run
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='BOW BOHB')
@@ -48,13 +49,16 @@ if __name__ == "__main__":
 
     })
 
-    smac = SMAC4MF(scenario=scenario, tae_runner=run_bow, intensifier_kwargs={"initial_budget": 1, "max_budget": 25})
+    smac = SMAC4MF(scenario=scenario, tae_runner=fasttext_run, intensifier_kwargs={"initial_budget": 1, "max_budget": 25})
     best_found_config = smac.optimize()
     wandb.init(
         # set the wandb project where this run will be logged
-        project="Baselines for Feature Extraction",
-        group="BOW",
+        project="Baselines for Feature Extraction1",
+        group="FastText",
     )
     print(f"BEST-->{best_found_config}")
-    wandb.log({"best_config_bow": best_found_config.get_dictionary()})
+    wandb.log({"best_config_fastText": best_found_config.get_dictionary()})
     wandb.finish()
+
+
+

@@ -7,10 +7,8 @@ import wandb
 import re
 import pandas as pd
 import numpy as np
-import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-import tqdm
 from sklearn.metrics import classification_report
 # HF
 from datasets import load_dataset
@@ -18,21 +16,28 @@ from datasets import load_dataset
 from HanTa import HanoverTagger as ht
 from functools import partial
 from collections import Counter
-from torch import optim
+from transformers import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
+# local
+try:
+    from utils import random_string
+except ImportError:
+    from utils import random_string
 tagger = ht.HanoverTagger('morphmodel_ger.pgz')
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def de_lemma_noun(text):
-    # see dlcumentation of teh tagger. its working on words assuming sentences
+    # see documentation of the tagger. its working on words assuming sentences
     lemma = [lemma for (word, lemma, pos) in tagger.tag_sent(text)]
     return lemma
+
 
 def de_lemma_verb(text):
     lemma = [lemma for (word, lemma, pos) in tagger.tag_sent(text)]
     return lemma
+
 
 def build_bow_vector(sequence, idx2token):
     vector = [0] * len(idx2token)
@@ -48,7 +53,7 @@ def tokenize(text, stop_words):
     text = re.sub(r'[^\w\s]', '', text)  # remove special characters
     text = text.lower()  # lowercase
     # what does tokenise do?
-    tokens = word_tokenize(text,language='german')  # tokenize
+    tokens = word_tokenize(text, language='german')  # tokenize
     tokens = de_lemma_noun(tokens)  # noun lemmatizer
     tokens = de_lemma_verb(tokens)  # verb lemmatizer
     tokens = [token for token in tokens if token not in stop_words]  # remove stopwords
@@ -67,9 +72,9 @@ class DeDataset(Dataset):
     def __init__(self, max_vocab=5000, max_len=128):
         dataset_train = load_dataset("amazon_reviews_multi", 'de', split='train')
         df = pd.DataFrame(dataset_train)
-        df=df.head(2000)
+        df = df.head(2000)
         df['product_category'] = [str(x).lower() for x in df['product_category']]
-        self.n_class=len(df['product_category'].unique())
+        self.n_class = len(df['product_category'].unique())
         df.product_category = pd.Categorical(df.product_category)
         df['target'] = df.product_category.cat.codes
         df['review_text'] = df['review_title'] + df['review_body']
@@ -132,7 +137,6 @@ class DeDataset(Dataset):
         self.bow_vector = df.bow_vector.tolist()
         self.targets = df.target.tolist()
 
-
     def __getitem__(self, i):
         return (
             self.sequences[i],
@@ -148,7 +152,6 @@ class DeDataset(Dataset):
         return len(self.token2idx), self.n_class
 
 
-
 def split_train_valid_test(corpus, valid_ratio=0.1, test_ratio=0.1):
     """Split dataset into train, validation, and test."""
     test_length = int(len(corpus) * test_ratio)
@@ -158,17 +161,19 @@ def split_train_valid_test(corpus, valid_ratio=0.1, test_ratio=0.1):
         corpus, lengths=[train_length, valid_length, test_length],
     )
 
+
 def collate(batch):
     seq = [item[0] for item in batch]
     bow = [item[1] for item in batch]
     tfidf = [item[2] for item in batch]
-    empty_arr=[]
+    empty_arr = []
     for item in batch:
         empty_arr.append(item[2])
     target = torch.LongTensor(empty_arr)
     target = torch.LongTensor([item[2] for item in batch])
     text = [item[3] for item in batch]
     return seq, bow, target, text
+
 
 class DenseNetwork(nn.Module):
 
@@ -189,9 +194,9 @@ class DenseNetwork(nn.Module):
         return x
 
 
-def train_epoch(model, optimizer, train_loader, criterion,scheduler, input_type='bow'):
+def train_epoch(model, optimizer, train_loader, criterion, scheduler, input_type='bow'):
     model.train()
-    total_loss, total,epoch_true = 0, 0, 0
+    total_loss, total, epoch_true = 0, 0, 0
 
     for seq, bow, target, text in train_loader:
         if input_type == 'bow':
@@ -227,7 +232,7 @@ def validate_epoch(model, valid_loader, criterion, input_type='bow'):
     model.eval()
     total_loss, total = 0, 0
     with torch.no_grad():
-        for seq, bow,target, text in valid_loader:
+        for seq, bow, target, text in valid_loader:
             if input_type == 'bow':
                 inputs = torch.FloatTensor(bow).to(device)
 
@@ -244,10 +249,10 @@ def validate_epoch(model, valid_loader, criterion, input_type='bow'):
 
     return total_loss / total
 
-def run_bow(config, job_type=None):
 
+def run_bow(config, job_type=None):
     if job_type is None:
-        job_type=f"bohb_{str(round(config['lr'],2))}_{config['batch']}_{config['epochs']}"
+        job_type = f"bohb_{str(round(config['lr'], 2))}_{config['batch']}_{random_string(5)}"
 
     wandb.init(
         # set the wandb project where this run will be logged
@@ -262,44 +267,60 @@ def run_bow(config, job_type=None):
     )
 
     MAX_LEN = 512
-    MAX_VOCAB = 10000 #TODO: Vary this to see how it impacts performance
+    MAX_VOCAB = config['vocab']  # 10000
+    LEARNING_RATE = config['lr']  # 5e-4
+    weight_decay = config['weight_decay']
+    opt_type = config['optimizer']
+    n_epochs = config['epochs']  # 10
+    BATCH_SIZE = config['batch']
+
+    wandb.log({"vocab": MAX_VOCAB})
+    wandb.log({"batch": BATCH_SIZE})
+    wandb.log({"lr": LEARNING_RATE})
+    wandb.log({"weight_decay": weight_decay})
+    wandb.log({"optimizer_type": opt_type})
+    wandb.log({"epochs": n_epochs})
+
     dataset = DeDataset(max_vocab=MAX_VOCAB, max_len=MAX_LEN)
     train_dataset, valid_dataset, test_dataset = split_train_valid_test(
         dataset, valid_ratio=0.05, test_ratio=0.05)
     len(train_dataset), len(valid_dataset), len(test_dataset)
 
-    BATCH_SIZE = config['batch']
-    wandb.log({"batch": BATCH_SIZE})
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, collate_fn=collate)
     valid_loader = DataLoader(valid_dataset, batch_size=BATCH_SIZE, collate_fn=collate)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, collate_fn=collate)
 
-    n_features, n_classes=dataset.get_feat_class()
+    n_features, n_classes = dataset.get_feat_class()
     model = DenseNetwork(n_features=n_features, n_classes=n_classes).to(device)
 
-    LEARNING_RATE =config['lr']# 5e-4
-    wandb.log({"lr": LEARNING_RATE})
     criterion = nn.CrossEntropyLoss()
-    #TODO: change the optimisers to see how it impacts performance
-    optimizer = optim.Adam(
-        filter(lambda p: p.requires_grad, model.parameters()),
-        lr=LEARNING_RATE,
-    )
-    #TODO: add variation of scheduler to see how it impacts performance
+
+    if opt_type == 'adam':
+        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),
+                                     lr=LEARNING_RATE, weight_decay=weight_decay)
+    elif opt_type == 'sgd':
+        optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()),
+                                    lr=LEARNING_RATE, weight_decay=weight_decay)
+    elif opt_type == 'adamW':
+        optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()),
+                          lr=LEARNING_RATE, weight_decay=weight_decay)
+    else:
+        print(f"Unsuported optimizer {opt_type}")
+
+    # TODO: add variation of scheduler to see how it impacts performance
     scheduler = CosineAnnealingLR(optimizer, 1)
-    n_epochs = config['epochs'] #10
-    wandb.log({"epochs": n_epochs})
 
     TRAIN_ACCURACIES = []
     train_losses, valid_losses = [], []
     for epoch in range(n_epochs):
-        train_loss, train_acc = train_epoch(model, optimizer, train_loader,criterion=criterion, scheduler=scheduler, input_type='bow')
+        train_loss, train_acc = train_epoch(model, optimizer, train_loader, criterion=criterion, scheduler=scheduler,
+                                            input_type='bow')
         valid_loss = validate_epoch(model, valid_loader, criterion=criterion, input_type='bow')
 
         print(
             f'epoch #{n_epochs + 1:3d}\ttrain_loss: {train_loss:.2e}\tvalid_loss: {valid_loss:.2e}\n \ttrain_acc: {train_acc:.2e}\n',
         )
-        wandb.log({"train_acc": train_acc*100})
+        wandb.log({"train_acc": train_acc * 100})
         train_losses.append(train_loss)
         TRAIN_ACCURACIES.append(train_acc)
         valid_losses.append(valid_loss)
@@ -321,22 +342,25 @@ def run_bow(config, job_type=None):
             y_true.extend(predictions)
             y_pred.extend(target)
 
-    # print(classification_report(y_true, y_pred))
+    print(classification_report(y_true, y_pred))
     wandb.finish()
-    return 1-TRAIN_ACCURACIES[-1]
+    return 1 - TRAIN_ACCURACIES[-1]
 
 
 def write_to_wand():
-    best_config={
-  'batch': 32,
-  'epochs': 10,
-  'lr': 0.004939121389077578,
-}
+    best_config = {
+        'batch': 32,
+        'epochs': 10,
+        'lr': 0.004939121389077578,
+    }
 
 
 if __name__ == '__main__':
-
     run_bow(config={
-  'batch': 32,
-  'epochs': 10,
-  'lr': 0.004939121389077578,}, job_type='Best bow')
+        'batch': 32,
+        'epochs': 10,
+        'lr': 0.004939121389077578,
+        'weight_decay': 1e-4,
+        'optimizer': 'adam',
+        'vocab': 10000},
+        job_type='Best bow')

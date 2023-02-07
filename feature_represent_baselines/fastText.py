@@ -15,11 +15,17 @@ from torch.utils.data.dataset import random_split
 from tqdm import tqdm
 import codecs
 from sklearn.metrics import classification_report
-import fasttext.util
+from transformers import AdamW
+import wandb
 import itertools
 from HanTa import HanoverTagger as ht
-from torch import optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
+
+# local
+try:
+    from utils import random_string
+except ImportError:
+    from utils import random_string
 
 tagger = ht.HanoverTagger('morphmodel_ger.pgz')
 
@@ -76,6 +82,7 @@ def remove_unknown(tokens):
 def pad_to_longest(lists):
     pad_token=0
     return list(zip(*itertools.zip_longest(*lists, fillvalue=pad_token)))
+
 class DeDataset(Dataset):
     def __init__(self, max_vocab=5000, max_len=128):
         dataset_train = load_dataset("amazon_reviews_multi", 'de', split='train')
@@ -206,16 +213,40 @@ class DenseNetwork(nn.Module):
         x = F.log_softmax(self.prediction(x), dim=1)
         return x
 # Main Runner
-def fasttext(config=None):
+def fasttext_run(config, job_type=None):
+    if job_type is None:
+        job_type = f"bohb_{str(round(config['lr'], 2))}_{config['batch']}_{random_string(5)}"
+
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="Baselines for Feature Extraction1",
+        group="FastText",
+        job_type=job_type,
+        config={
+            "model": 'fastText embed classifier',
+            "dataset": "amazon-multi",
+            "device": device,
+        }
+    )
+
     MAX_LEN = 512
-    MAX_VOCAB = 10000 # config['max_vocab']
+    # training params
+    MAX_VOCAB = config['vocab']  # 10000
+    LEARNING_RATE = config['lr']  # 5e-4
+    weight_decay = config['weight_decay']
+    opt_type = config['optimizer']
+    n_epochs = config['epochs']  # 10
+    BATCH_SIZE = config['batch']
+
+    wandb.log({"batch": BATCH_SIZE})
+    wandb.log({"lr": LEARNING_RATE})
+    wandb.log({"weight_decay": weight_decay})
+    wandb.log({"optimizer_type": opt_type})
+    wandb.log({"epochs": n_epochs})
+
     dataset = DeDataset(max_vocab=MAX_VOCAB, max_len=MAX_LEN)
     train_dataset, valid_dataset, test_dataset = split_train_valid_test(
         dataset, valid_ratio=0.05, test_ratio=0.05)
-
-    # training params
-    batch_size = 256   # config['batch']
-    BATCH_SIZE = 256  # config['batch']
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, collate_fn=collate)
     valid_loader = DataLoader(valid_dataset, batch_size=BATCH_SIZE, collate_fn=collate)
@@ -223,14 +254,12 @@ def fasttext(config=None):
 
     # model parameters
     embed_dim = 300  # default size of embed from fast text
-    #TODO: Vary this to get the best result
-    weight_decay = 1e-4    # config['weight_decay']
 
     print('preparing embedding matrix...')
     words_not_found = []
     # Embedding matrix is of size vocab(from the train set) length
     vocab = dataset.get_vocab()
-    # TODO: Log len of vocab since embedding matrix is of size vocab length
+    wandb.log({"vocab_len":len(vocab)})
     nb_words = min(MAX_VOCAB, len(vocab))
     embedding_matrix = np.zeros((len(vocab), embed_dim))
     for i, word in enumerate(vocab):
@@ -244,20 +273,26 @@ def fasttext(config=None):
             words_not_found.append(word)
     print('number of null word embeddings: %d' % np.sum(np.sum(embedding_matrix, axis=1) == 0))
 
-    model = DenseNetwork(batch=batch_size,embed_dim=embed_dim,vocab_len=len(vocab),n_classes=dataset.n_class)
+    model = DenseNetwork(batch=BATCH_SIZE,embed_dim=embed_dim,vocab_len=len(vocab),n_classes=dataset.n_class)
     model.set_embedding_weights(torch.FloatTensor(embedding_matrix))
     model=model.to(device)
 
-    learning_rate = 0.001#config['lr']
     criterion = nn.CrossEntropyLoss()
-  #TODO: Vary this to get the best result
-    optimizer = optim.Adam(
-        filter(lambda p: p.requires_grad, model.parameters()),
-        lr=learning_rate,
-    )
 
+    if opt_type == 'adam':
+        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),
+                                     lr=LEARNING_RATE, weight_decay=weight_decay)
+    elif opt_type == 'sgd':
+        optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()),
+                                    lr=LEARNING_RATE, weight_decay=weight_decay)
+    elif opt_type == 'adamW':
+        optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()),
+                          lr=LEARNING_RATE, weight_decay=weight_decay)
+    else:
+        print(f"Unsuported optimizer {opt_type}")
+
+    # TODO: Vary this to get the best result
     scheduler = CosineAnnealingLR(optimizer, 1)
-    n_epochs = 10 #config['epochs']
 
     TRAIN_ACCURACIES = []
     train_losses, valid_losses = [], []
@@ -268,6 +303,7 @@ def fasttext(config=None):
         print(
             f'epoch #{n_epochs + 1:3d}\ttrain_loss: {train_loss:.2e}\tvalid_loss: {valid_loss:.2e}\n \ttrain_acc: {train_acc:.2e}\n',
         )
+        wandb.log({"train_acc": train_acc * 100})
         train_losses.append(train_loss)
         TRAIN_ACCURACIES.append(train_acc)
         valid_losses.append(valid_loss)
@@ -289,6 +325,8 @@ def fasttext(config=None):
             y_pred.extend(target)
 
     print(classification_report(y_true, y_pred))
+    wandb.finish()
+    return 1 - TRAIN_ACCURACIES[-1]
 
 
 def train_epoch(model, optimizer, train_loader, criterion,scheduler):
@@ -306,6 +344,7 @@ def train_epoch(model, optimizer, train_loader, criterion,scheduler):
 
         # Compute loss
         loss = criterion(output, target)
+        wandb.log({"train_loss": loss.item()})
 
         # Perform gradient descent, backwards pass
         loss.backward()
@@ -333,6 +372,7 @@ def validate_epoch(model, valid_loader, criterion):
 
            # Calculate how wrong the model is
            loss = criterion(output, target)
+           wandb.log({"valid_loss": loss.item()})
 
             # Record metrics
            total_loss += loss.item()
@@ -348,4 +388,11 @@ if __name__ == '__main__':
     g = torch.Generator()
     g.manual_seed(0)
     #TODO: log config
-    fasttext()
+    fasttext_run(config={
+        'batch': 32,
+        'epochs': 1,
+        'lr': 0.004939121389077578,
+        'weight_decay': 1e-4,
+        'optimizer': 'adam',
+        'vocab': 10000},
+        job_type='fasttext')

@@ -17,7 +17,12 @@ from torch.utils.data import Dataset
 
 # HF
 from datasets import load_dataset
-
+from transformers import AdamW
+# local
+try:
+    from utils import random_string
+except ImportError:
+    from utils import random_string
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
@@ -39,7 +44,7 @@ class Vectorizer():
         self.clean_pattern = clean_pattern
         self.max_features = max_features
         self.stopwords = stopwords.words('german')
-        self.stopwords.update(['.', ',', '"', "'", ':', ';', '(', ')', '[', ']', '{', '}'])
+        self.stopwords.extend(['.', ',', '"', "'", ':', ';', '(', ')', '[', ']', '{', '}'])
         self.tfidf = TfidfVectorizer(stop_words=self.stopwords, max_features=self.max_features)
         self.builded = False
 
@@ -196,7 +201,7 @@ def get_vectorised_data(max_features=512):
 
 def run_tf_idf(config,job_type=None):
     if job_type is None:
-        job_type=f"bohb_{str(round(config['lr'],2))}_{config['batch']}_{config['epochs']}"
+        job_type=f"bohb_{str(round(config['lr'],2))}_{config['batch']}_{random_string(5)}"
     wandb.init(
         # set the wandb project where this run will be logged
         project="Baselines for Feature Extraction",
@@ -217,16 +222,37 @@ def run_tf_idf(config,job_type=None):
     train_sampler = SubsetRandomSampler(train_indices)
     test_sampler = SubsetRandomSampler(test_indices)
 
+
+    LEARNING_RATE = config['lr']  # 5e-4
+    weight_decay = config['weight_decay']
+    opt_type = config['optimizer']
+    n_epochs = config['epochs']  # 10
     BATCH_SIZE = config['batch']
+
     wandb.log({"batch": BATCH_SIZE})
+    wandb.log({"lr": LEARNING_RATE})
+    wandb.log({"weight_decay": weight_decay})
+    wandb.log({"optimizer_type": opt_type})
+    wandb.log({"epochs": n_epochs})
+
     train_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE,
                                                sampler=train_sampler)
     validation_loader = torch.utils.data.DataLoader(dataset, batch_size=BATCH_SIZE,
                                                     sampler=test_sampler)
 
     model = DenseNetwork(n_features=n_features, n_classes=n_classes).to(device)
-    #TODO: vary the optimiser for BOHB
-    optimizer = optim.RMSprop(model.parameters(), lr=config['lr'])
+
+    if opt_type == 'adam':
+        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),
+                                     lr=LEARNING_RATE, weight_decay=weight_decay)
+    elif opt_type == 'sgd':
+        optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()),
+                                    lr=LEARNING_RATE, weight_decay=weight_decay)
+    elif opt_type == 'adamW':
+        optimizer = AdamW(filter(lambda p: p.requires_grad, model.parameters()),
+                          lr=LEARNING_RATE, weight_decay=weight_decay)
+    else:
+        print(f"Unsuported optimizer {opt_type}")
     #TODO: vary the scheduler for BOHB
     scheduler = CosineAnnealingLR(optimizer, 1)
     score = train(model, train_loader,config,optimizer=optimizer,scheduler=scheduler)
@@ -250,7 +276,10 @@ if __name__ == '__main__':
     g.manual_seed(0)
 
     run_tf_idf(config={
-        'batch': 128,
+        'batch': 32,
         'epochs': 10,
-        'lr': 0.006876174282463883,
-    }, job_type="best_tf-idf")
+        'lr': 0.004939121389077578,
+        'weight_decay': 1e-4,
+        'optimizer': 'adam'},
+        job_type="best_tf-idf")
+
