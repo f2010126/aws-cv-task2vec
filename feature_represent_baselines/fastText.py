@@ -90,6 +90,7 @@ class DeDataset(Dataset):
                      axis=1)
 
         german_stops = set(stopwords.words('german'))
+        print(f'Start Lemmatization')
         german_stops.update(['.', ',', '"', "'", ':', ';', '(', ')', '[', ']', '{', '}'])
         df['tokens'] = df.review_text.apply(
             partial(
@@ -125,7 +126,7 @@ class DeDataset(Dataset):
         )]
         # Remove the <UNK>
         df.loc[:, 'tokens'] = df.tokens.apply(remove_unknown)
-
+        print(f'End Lemmatization')
         # Build vocab
         self.vocab = sorted(set(
             token for doc in list(df.tokens) for token in doc
@@ -138,7 +139,7 @@ class DeDataset(Dataset):
         df['indexed_tokens'] = df.tokens.apply(
             lambda doc: [self.token2idx[token] for token in doc],
         )
-
+        print(f'Dataset loaded')
         self.text = df.review_text.tolist()
         # needs to be padded
         self.sequences = pad_to_longest(df.indexed_tokens.tolist())
@@ -212,18 +213,6 @@ def fasttext_run(config, job_type=None):
     if job_type is None:
         job_type = f"bohb_{str(round(config['lr'], 2))}_{config['batch']}_{random_string(5)}"
 
-    wandb.init(
-        # set the wandb project where this run will be logged
-        project="Baselines for Feature Extraction",
-        group="FastText",
-        job_type=job_type,
-        config={
-            "model": 'fastText embed classifier',
-            "dataset": "amazon-multi",
-            "device": device,
-        }
-    )
-
     MAX_LEN = 512
     # training params
     MAX_VOCAB = 10000
@@ -233,13 +222,26 @@ def fasttext_run(config, job_type=None):
     n_epochs = config['epochs']  # 10
     BATCH_SIZE = config['batch']
 
+    dataset = DeDataset(max_vocab=MAX_VOCAB, max_len=MAX_LEN)
+
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="Debug",#Baselines for Feature Extraction",
+        group="FastText",
+        job_type=job_type,
+        config={
+            "model": 'fastText embed classifier',
+            "dataset": "amazon-multi",
+            "device": device,
+        }
+    )
+
     wandb.log({"batch": BATCH_SIZE})
     wandb.log({"lr": LEARNING_RATE})
     wandb.log({"weight_decay": weight_decay})
     wandb.log({"optimizer_type": opt_type})
     wandb.log({"epochs": n_epochs})
 
-    dataset = DeDataset(max_vocab=MAX_VOCAB, max_len=MAX_LEN)
     train_dataset, valid_dataset, test_dataset = split_train_valid_test(
         dataset, valid_ratio=0.05, test_ratio=0.05)
 
@@ -257,7 +259,7 @@ def fasttext_run(config, job_type=None):
     wandb.log({"vocab_len": len(vocab)})
     nb_words = min(MAX_VOCAB, len(vocab))
     embedding_matrix = np.zeros((len(vocab), embed_dim))
-    for i, word in enumerate(vocab):
+    for i, word in tqdm(enumerate(vocab)):
         if i >= nb_words:
             continue
         embedding_vector = embeddings.get(word)
@@ -298,7 +300,7 @@ def fasttext_run(config, job_type=None):
     with torch.no_grad():
         acc_metric = evaluate.load("accuracy")
         f1_metric = evaluate.load("f1")
-        for seq, target, text in test_loader:
+        for seq, target, text in tqdm(test_loader):
             inputs = torch.FloatTensor(seq).to(device)
             probs = model(inputs)
 
@@ -321,7 +323,7 @@ def train_epoch(model, optimizer, train_loader, criterion, scheduler):
     acc_metric = evaluate.load("accuracy")
     f1_metric = evaluate.load("f1")
 
-    for seq, target, text in train_loader:
+    for seq, target, text in tqdm(train_loader):
         inputs = torch.FloatTensor(seq).to(device)
 
         # Reset gradient
@@ -355,7 +357,7 @@ def validate_epoch(model, valid_loader, criterion):
     f1_metric = evaluate.load("f1")
 
     with torch.no_grad():
-        for seq, target, text in valid_loader:
+        for seq, target, text in tqdm(valid_loader):
             inputs = torch.LongTensor(seq).to(device)
             target = torch.LongTensor(target).to(device)
             # Forward pass

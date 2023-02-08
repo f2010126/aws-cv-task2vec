@@ -10,9 +10,7 @@ import torch.nn.functional as F
 import evaluate
 from torch.utils.data.sampler import SubsetRandomSampler
 
-
-# HF
-from transformers import AdamW
+from torch.optim import AdamW
 
 # local
 try:
@@ -42,11 +40,12 @@ class DenseNetwork(nn.Module):
         x = F.log_softmax(self.prediction(x), dim=1)
         return x
 
+
 def test(model, validation_loader, test_sampler, criterion=nn.CrossEntropyLoss()):
+    acc_metric = evaluate.load("accuracy")
+    f1_metric = evaluate.load("f1")
     model.eval()
     with torch.no_grad():
-        acc_metric = evaluate.load("accuracy")
-        f1_metric = evaluate.load("f1")
         for data_, target_ in validation_loader:
             data_, target_ = data_.to(device), target_.to(device)
             outputs = model(data_)
@@ -177,9 +176,9 @@ if __name__ == '__main__':
     g.manual_seed(0)
 
     run_tf_idf(config={
-        'batch': 64,
-        'epochs': 10,
-        'lr': 0.009672407004688972,
-        'optimizer': 'adamW',
-        'weight_decay': 0.003052454777425161, },
+        'batch': 512,
+        'epochs': 9,
+        'lr': 0.00025983056899739164,
+        'optimizer': 'adam',
+        'weight_decay': 0.0008695273380642427, },
         job_type="best_tf-idf")

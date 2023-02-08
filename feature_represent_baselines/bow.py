@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
+from tqdm import tqdm
 from sklearn.metrics import classification_report
 # HF
 from datasets import load_dataset
@@ -85,6 +86,7 @@ class DeDataset(Dataset):
 
         german_stops = set(stopwords.words('german'))
         german_stops.update(['.', ',', '"', "'", ':', ';', '(', ')', '[', ']', '{', '}'])
+        print(f'Start Lremmatization')
         df['tokens'] = df.review_text.apply(
             partial(
                 tokenize,
@@ -116,7 +118,7 @@ class DeDataset(Dataset):
         df = df[df.tokens.apply(
             lambda tokens: any(token != '<UNK>' for token in tokens),
         )]
-
+        print(f'End Lremmatization')
         # Build vocab
         vocab = sorted(set(
             token for doc in list(df.tokens) for token in doc
@@ -133,6 +135,7 @@ class DeDataset(Dataset):
         df['bow_vector'] = df.indexed_tokens.apply(
             build_bow_vector, args=(self.idx2token,)
         )
+        print('Data loaded!')
 
         self.text = df.review_text.tolist()
         self.sequences = df.indexed_tokens.tolist()
@@ -200,7 +203,7 @@ def train_epoch(model, optimizer, train_loader, criterion, scheduler):
     model.train()
     acc_metric = evaluate.load("accuracy")
     f1_metric = evaluate.load("f1")
-    for seq, bow, target, text in train_loader:
+    for seq, bow, target, text in tqdm(train_loader):
         inputs = torch.FloatTensor(bow).to(device)
         # Reset gradient
         optimizer.zero_grad()
@@ -231,7 +234,7 @@ def validate_epoch(model, valid_loader, criterion, input_type='bow'):
     f1_metric = evaluate.load("f1")
 
     with torch.no_grad():
-        for seq, bow, target, text in valid_loader:
+        for seq, bow, target, text in tqdm(valid_loader):
             inputs = torch.FloatTensor(bow).to(device)
             # Forward pass
             output = model(inputs)
@@ -250,9 +253,18 @@ def run_bow(config, job_type=None):
     if job_type is None:
         job_type = f"bohb_{str(round(config['lr'], 2))}_{config['batch']}_{random_string(5)}"
 
+    MAX_VOCAB = config['vocab']  # 10000
+    LEARNING_RATE = config['lr']  # 5e-4
+    weight_decay = config['weight_decay']
+    opt_type = config['optimizer']
+    n_epochs = config['epochs']  # 10
+    BATCH_SIZE = config['batch']
+
+    dataset = DeDataset(max_vocab=MAX_VOCAB, max_len=512)
+
     wandb.init(
         # set the wandb project where this run will be logged
-        project="Baselines for Feature Extraction",
+        project="Debug",#"Baselines for Feature Extraction1",
         group="BOW",
         job_type=job_type,
         config={
@@ -262,14 +274,6 @@ def run_bow(config, job_type=None):
         },
     )
 
-    MAX_LEN = 512
-    MAX_VOCAB = config['vocab']  # 10000
-    LEARNING_RATE = config['lr']  # 5e-4
-    weight_decay = config['weight_decay']
-    opt_type = config['optimizer']
-    n_epochs = config['epochs']  # 10
-    BATCH_SIZE = config['batch']
-
     wandb.log({"vocab": MAX_VOCAB})
     wandb.log({"batch": BATCH_SIZE})
     wandb.log({"lr": LEARNING_RATE})
@@ -277,10 +281,8 @@ def run_bow(config, job_type=None):
     wandb.log({"optimizer_type": opt_type})
     wandb.log({"epochs": n_epochs})
 
-    dataset = DeDataset(max_vocab=MAX_VOCAB, max_len=MAX_LEN)
     train_dataset, valid_dataset, test_dataset = split_train_valid_test(
         dataset, valid_ratio=0.05, test_ratio=0.05)
-    len(train_dataset), len(valid_dataset), len(test_dataset)
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, collate_fn=collate)
     valid_loader = DataLoader(valid_dataset, batch_size=BATCH_SIZE, collate_fn=collate)
@@ -307,15 +309,14 @@ def run_bow(config, job_type=None):
     scheduler = CosineAnnealingLR(optimizer, 1)
 
     for epoch in range(n_epochs):
-        train_epoch(model, optimizer, train_loader, criterion=criterion, scheduler=scheduler,
-                    input_type='bow')
-        validate_epoch(model, valid_loader, criterion=criterion, input_type='bow')
+        train_epoch(model, optimizer, train_loader, criterion=criterion, scheduler=scheduler)
+        validate_epoch(model, valid_loader, criterion=criterion)
 
     model.eval()
     with torch.no_grad():
         acc_metric = evaluate.load("accuracy")
         f1_metric = evaluate.load("f1")
-        for seq, bow, target, text in test_loader:
+        for seq, bow, target, text in tqdm(test_loader):
             inputs = torch.FloatTensor(bow).to(device)
             probs = model(inputs)
 
