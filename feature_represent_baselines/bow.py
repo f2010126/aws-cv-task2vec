@@ -12,6 +12,7 @@ from nltk.tokenize import word_tokenize
 from sklearn.metrics import classification_report
 # HF
 from datasets import load_dataset
+import evaluate
 # German Lemmatizer
 from HanTa import HanoverTagger as ht
 from functools import partial
@@ -195,60 +196,54 @@ class DenseNetwork(nn.Module):
         return x
 
 
-def train_epoch(model, optimizer, train_loader, criterion, scheduler, input_type='bow'):
+def train_epoch(model, optimizer, train_loader, criterion, scheduler):
     model.train()
-    total_loss, total, epoch_true = 0, 0, 0
-
+    acc_metric = evaluate.load("accuracy")
+    f1_metric = evaluate.load("f1")
     for seq, bow, target, text in train_loader:
-        if input_type == 'bow':
-            inputs = torch.FloatTensor(bow).to(device)
-
+        inputs = torch.FloatTensor(bow).to(device)
         # Reset gradient
         optimizer.zero_grad()
-
         # Forward pass
         output = model(inputs)
-
         # Compute loss
         loss = criterion(output, target)
-        wandb.log({"train_loss": loss.item()})
-
         # Perform gradient descent, backwards pass
         loss.backward()
+
+        # Predict stuff
+        _, pred = torch.max(output, dim=1)
+        acc_metric.add_batch(predictions=pred, references=target)
+        f1_metric.add_batch(predictions=pred, references=target)
+        # Log metrics
+        wandb.log({"train_batch_loss": loss.item()})
+        wandb.log({"train_batch_acc": acc_metric.compute()['accuracy']})
+        wandb.log({"train_batch_f1": f1_metric.compute(average="weighted")['f1']})
 
         # Take a step in the right direction
         optimizer.step()
         scheduler.step()
 
-        # Record metrics
-        total_loss += loss.item()
-        total += len(target)
-        _, pred = torch.max(output, dim=1)
-        epoch_true = epoch_true + torch.sum(pred == target).item()
-
-    return total_loss / total, epoch_true / total
-
 
 def validate_epoch(model, valid_loader, criterion, input_type='bow'):
     model.eval()
-    total_loss, total = 0, 0
+    acc_metric = evaluate.load("accuracy")
+    f1_metric = evaluate.load("f1")
+
     with torch.no_grad():
         for seq, bow, target, text in valid_loader:
-            if input_type == 'bow':
-                inputs = torch.FloatTensor(bow).to(device)
-
+            inputs = torch.FloatTensor(bow).to(device)
             # Forward pass
             output = model(inputs)
-
-            # Calculate how wrong the model is
             loss = criterion(output, target)
-            wandb.log({"valid_loss": loss.item()})
-
-            # Record metrics
-            total_loss += loss.item()
-            total += len(target)
-
-    return total_loss / total
+            # Predict stuff
+            _, pred = torch.max(output, dim=1)
+            acc_metric.add_batch(predictions=pred, references=target)
+            f1_metric.add_batch(predictions=pred, references=target)
+            # Log metrics
+            wandb.log({"valid_batch_acc": acc_metric.compute()['accuracy']})
+            wandb.log({"valid_batch_f1": f1_metric.compute(average="weighted")['f1']})
+            wandb.log({"valid_batch_loss": loss.item()})
 
 
 def run_bow(config, job_type=None):
@@ -311,27 +306,15 @@ def run_bow(config, job_type=None):
     # TODO: add variation of scheduler to see how it impacts performance
     scheduler = CosineAnnealingLR(optimizer, 1)
 
-    TRAIN_ACCURACIES = []
-    train_losses, valid_losses = [], []
     for epoch in range(n_epochs):
-        train_loss, train_acc = train_epoch(model, optimizer, train_loader, criterion=criterion, scheduler=scheduler,
-                                            input_type='bow')
-        valid_loss = validate_epoch(model, valid_loader, criterion=criterion, input_type='bow')
-
-        print(
-            f'epoch #{n_epochs + 1:3d}\ttrain_loss: {train_loss:.2e}\tvalid_loss: {valid_loss:.2e}\n \ttrain_acc: {train_acc:.2e}\n',
-        )
-        wandb.log({"train_acc": train_acc * 100})
-        train_losses.append(train_loss)
-        TRAIN_ACCURACIES.append(train_acc)
-        valid_losses.append(valid_loss)
+        train_epoch(model, optimizer, train_loader, criterion=criterion, scheduler=scheduler,
+                    input_type='bow')
+        validate_epoch(model, valid_loader, criterion=criterion, input_type='bow')
 
     model.eval()
-    test_accuracy, n_examples = 0, 0
-    y_true, y_pred = [], []
-    input_type = 'bow'
-
     with torch.no_grad():
+        acc_metric = evaluate.load("accuracy")
+        f1_metric = evaluate.load("f1")
         for seq, bow, target, text in test_loader:
             inputs = torch.FloatTensor(bow).to(device)
             probs = model(inputs)
@@ -340,28 +323,23 @@ def run_bow(config, job_type=None):
             predictions = np.argmax(probs, axis=1)
             target = target.cpu().numpy()
 
-            y_true.extend(predictions)
-            y_pred.extend(target)
+            acc_metric.add_batch(predictions=predictions, references=target)
+            f1_metric.add_batch(predictions=predictions, references=target)
 
-    print(classification_report(y_true, y_pred))
+        f1 = f1_metric.compute(average="weighted")['f1']
+        wandb.log({"test_final_acc": acc_metric.compute()['accuracy']})
+        wandb.log({"test_final_f1": f1})
+
     wandb.finish()
-    return 1 - TRAIN_ACCURACIES[-1]
-
-
-def write_to_wand():
-    best_config = {
-        'batch': 32,
-        'epochs': 10,
-        'lr': 0.004939121389077578,
-    }
+    return 1 - f1
 
 
 if __name__ == '__main__':
     run_bow(config={
-        'batch': 64,
-        'epochs': 10,
-        'lr': 0.008094972482995578,
-        'optimizer': 'adamW',
+        'batch': 32,
+        'epochs': 6,
+        'lr': 0.004004797203254154,
+        'optimizer': 'adam',
         'vocab': 4096,
-        'weight_decay': 1.3926095972652506e-05, },
+        'weight_decay': 0.00014330152463163526, },
         job_type='Best bow')

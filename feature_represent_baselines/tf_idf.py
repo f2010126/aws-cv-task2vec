@@ -10,8 +10,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
-from ConfigSpace import ConfigurationSpace, Configuration
+import evaluate
 from torch.utils.data.sampler import SubsetRandomSampler
 from torch.utils.data import Dataset
 
@@ -111,10 +110,13 @@ class DenseNetwork(nn.Module):
 
 
 def test(model, validation_loader, test_sampler, criterion=nn.CrossEntropyLoss()):
+    model.eval()
     test_true = 0
     test_total = len(test_sampler)
     test_loss = 0.0
     with torch.no_grad():
+        acc_metric = evaluate.load("accuracy")
+        f1_metric = evaluate.load("f1")
         for data_, target_ in validation_loader:
             data_, target_ = data_.to(device), target_.to(device)
 
@@ -127,25 +129,28 @@ def test(model, validation_loader, test_sampler, criterion=nn.CrossEntropyLoss()
 
             test_true += torch.sum(pred == target_).item()
             test_loss += loss
+            acc_metric.add_batch(predictions=pred, references=target_)
+            f1_metric.add_batch(predictions=pred, references=target_)
 
     accuracy = round(test_true / test_total, 4)
     print(f"Validation finished: Accuracy = {round(100 * test_true / test_total, 2)}%, Loss = {test_loss}")
-    wandb.log({"test_accuracy": round(100 * test_true / test_total, 2)})
-    return 1 - accuracy
+
+    f1 = f1_metric.compute(average="weighted")['f1']
+    wandb.log({"test_final_acc": acc_metric.compute()['accuracy']})
+    wandb.log({"test_final_f1": f1})
+    return f1
 
 
 def train(model, train_loader, config, optimizer, scheduler):
     criterion = nn.CrossEntropyLoss()
     wandb.log({"lr": config['lr']})
-
+    model.train()
     EPOCHS = config['epochs']
-    TRAIN_LOSSES = []
-    TRAIN_ACCURACIES = []
 
     for epoch in range(EPOCHS):
-        epoch_loss = 0.0
-        epoch_true = 0
-        epoch_total = 0
+
+        acc_metric = evaluate.load("accuracy")
+        f1_metric = evaluate.load("f1")
         for data_, target_ in train_loader:
             data_ = data_.to(device)
             target_ = target_.to(device)
@@ -158,27 +163,20 @@ def train(model, train_loader, config, optimizer, scheduler):
 
             # Computing loss & backward propagation
             loss = criterion(outputs, target_)
-            wandb.log({"train_loss": loss})
             loss.backward()
+
+            # Predict stuff
+            _, pred = torch.max(outputs, dim=1)
+            acc_metric.add_batch(predictions=pred, references=target_)
+            f1_metric.add_batch(predictions=pred, references=target_)
+            # Log metrics
+            wandb.log({"train_batch_loss": loss})
+            wandb.log({"train_batch_acc": acc_metric.compute()['accuracy']})
+            wandb.log({"train_batch_f1": f1_metric.compute(average="weighted")['f1']})
 
             # Applying gradients
             optimizer.step()
             scheduler.step()
-
-            epoch_loss += loss.item()
-
-            _, pred = torch.max(outputs, dim=1)
-            epoch_true = epoch_true + torch.sum(pred == target_).item()
-
-            epoch_total += target_.size(0)
-        TRAIN_LOSSES.append(epoch_loss)
-        wandb.log({"train_epoch_loss": epoch_loss})
-        wandb.log({"train_epoch_accuracy": 100 * epoch_true / epoch_total})
-        TRAIN_ACCURACIES.append(100 * epoch_true / epoch_total)
-    accuracy = TRAIN_ACCURACIES[epoch - 1]
-    print(
-        f"Epoch {epoch + 1}/{EPOCHS} finished: train_loss = {epoch_loss}, train_accuracy = {TRAIN_ACCURACIES[epoch - 1]}")
-    return 1 - accuracy
 
 
 def get_vectorised_data(max_features=512):
@@ -205,7 +203,7 @@ def run_tf_idf(config, job_type=None):
 
     wandb.init(
         # set the wandb project where this run will be logged
-        project="Baselines for Feature Extraction",
+        project="Baselines for Feature Extraction1",
         group="TF-IDF",
         job_type=job_type,
         config={
@@ -255,10 +253,11 @@ def run_tf_idf(config, job_type=None):
         print(f"Unsuported optimizer {opt_type}")
     # TODO: vary the scheduler for BOHB
     scheduler = CosineAnnealingLR(optimizer, 1)
-    score = train(model, train_loader, config, optimizer=optimizer, scheduler=scheduler)
-    test(model, validation_loader, test_sampler=test_sampler)
+    train(model, train_loader, config, optimizer=optimizer, scheduler=scheduler)
+    score=test(model, validation_loader, test_sampler=test_sampler)
     wandb.finish()
-    return score
+    # return 1-
+    return 1 - score
 
 
 def write_to_wand():
@@ -278,7 +277,7 @@ if __name__ == '__main__':
 
     run_tf_idf(config={
         'batch': 64,
-        'epochs': 10,
+        'epochs': 1,
         'lr': 0.009672407004688972,
         'optimizer': 'adamW',
         'weight_decay': 0.003052454777425161, },

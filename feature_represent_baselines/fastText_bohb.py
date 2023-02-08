@@ -59,6 +59,3 @@ if __name__ == "__main__":
     print(f"BEST-->{best_found_config}")
     wandb.log({"best_config_fastText": best_found_config.get_dictionary()})
     wandb.finish()
-
-
-
