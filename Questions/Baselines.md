@@ -37,6 +37,29 @@ Downsides:
 - context is largely ignored.
 - Scaling is difficult since quality of data depends on the vocabulary and the length of the TF-IDF vector.
 
+
+The two representations were unable handle out of vocabulary texts, their test metric depends on the vocabulary created. This reduces the ability of the model to generalise. Embeddings are an n-dimesnsional vector the represents the words so similarities b/w words are represented based on the training text. 
+eg Fahrrad<-->Motorrad are close in this space.
+
+
+## FastText
+- Word representations are averaged into a text representation and give to the classifier. The major change is now the sentence as a whole is embedded, not word vectors.
+- Text representations are reusable, hidden portion.
+- Complexity O(kh) but reduced to O(h(logk)), k is number of classes, h is dimension of text rep. Here, k = 31, h = 512.
+- Uses n-grams (sub-words). So word is broken down till a representation is found. 
+	1.  Handles out of vocabulary words
+	2. words sense from etymology
+	3. dealing with misspellings
+
+### Implementation
+- Classifier here uses nn.EmbeddingBag layer when the input sentence(s) are short without a need for padding
+- instead of each word being represented by an embedding vector, with an EmbeddingLayer, each sentence is represented by an embedding vector.
+- FastText tends to embed words with similar morphology closer to each other.
+- Good model, embeddings are between 50 and 500 in length.
+
+Downsides:
+- High memory usage. The Embedding layer depends on the vocab.
+
 ## Assumptions
 - vocabulary size is capped at 512
 - All methods recived input of the similar size overall, ~ 1600 samples of 512 vectors
